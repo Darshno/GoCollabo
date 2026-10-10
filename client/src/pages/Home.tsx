@@ -1,5 +1,14 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { AuthDialog } from "@/components/AuthDialog";
+import {
+  Breadcrumbs,
+  MobileTabBar,
+  SideRail,
+  SkipLink,
+  Topbar,
+  showsWorkspaceChrome,
+  useRouteChangeEffects,
+} from "@/components/Navigation";
 import { trpc } from "@/lib/trpc";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -10,22 +19,17 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Clapperboard,
   Compass,
   Filter,
   Grid2X2,
   HeartHandshake,
   Image as ImageIcon,
-  LayoutDashboard,
-  LogIn,
-  Menu,
   Plus,
   Search,
   Send,
   SlidersHorizontal,
   Sparkles,
   X,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -473,340 +477,6 @@ function Tag({
     </span>
   );
 }
-function Logo() {
-  const [, setLocation] = useLocation();
-  return (
-    <button
-      className="flex items-center gap-2 text-left"
-      onClick={() => setLocation("/")}
-    >
-      <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[var(--navy)] text-[var(--lime)]">
-        <Clapperboard size={16} />
-      </span>
-      <span className="text-[15px] font-black tracking-[-.04em]">
-        frame<span className="font-normal text-[#687087]">foundry</span>
-      </span>
-    </button>
-  );
-}
-
-function Topbar({
-  demoRole,
-  setDemoRole,
-  onLogin,
-}: {
-  demoRole: string;
-  setDemoRole: (x: string) => void;
-  onLogin: () => void;
-}) {
-  const [, setLocation] = useLocation();
-  const auth = useAuth();
-  const [open, setOpen] = useState(false);
-  const currentRole = auth.user
-    ? auth.user.accountType === "brand"
-      ? "brand"
-      : "creator"
-    : demoRole;
-  const accountTypeMutation = trpc.auth.setAccountType.useMutation({
-    onSuccess: async ({ accountType }) => {
-      await auth.refresh();
-      toast.success(`Switched to ${accountType} workspace`);
-    },
-    onError: () => toast.error("Could not update account type"),
-  });
-  return (
-    <header className="nav-shell sticky top-0 z-30">
-      <div className="mx-auto flex h-[70px] max-w-[1440px] items-center justify-between px-5 lg:px-10">
-        <Logo />
-        <nav className="desktop-only flex items-center gap-7 text-sm font-semibold text-[#687087]">
-          <button
-            onClick={() => setLocation("/discover")}
-            className="hover:text-[var(--ink)]"
-          >
-            Discover
-          </button>
-          <button
-            onClick={() => setLocation("/briefs")}
-            className="hover:text-[var(--ink)]"
-          >
-            Briefs
-          </button>
-          <button
-            onClick={() => setLocation("/creator")}
-            className="hover:text-[var(--ink)]"
-          >
-            Creator workspace
-          </button>
-        </nav>
-        <div className="flex items-center gap-2">
-          {auth.user ? (
-            <label className="desktop-only flex items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3 py-1 text-[11px] text-[#9299aa]">
-              Account
-              <select
-                aria-label="Live account type"
-                value={auth.user.accountType === "brand" ? "brand" : "creator"}
-                disabled={accountTypeMutation.isPending}
-                onChange={event =>
-                  accountTypeMutation.mutate({
-                    accountType: event.target.value as "creator" | "brand",
-                  })
-                }
-                className="bg-transparent py-1 font-bold capitalize text-[var(--ink)] outline-none"
-              >
-                <option value="creator">Creator</option>
-                <option value="brand">Brand</option>
-              </select>
-            </label>
-          ) : !auth.loading ? (
-            <div className="desktop-only flex items-center gap-1 rounded-full border border-[var(--line)] bg-white p-1 text-[11px]">
-              <span className="px-2 text-[#9299aa]">Demo as</span>
-              {["creator", "brand"].map(role => (
-                <button
-                  key={role}
-                  onClick={() => setDemoRole(role)}
-                  className={`rounded-full px-2.5 py-1.5 font-bold capitalize ${demoRole === role ? "bg-[var(--navy)] text-white" : "text-[#697186]"}`}
-                >
-                  {role}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {auth.user ? (
-            <Button
-              variant="ghost"
-              onClick={async () => {
-                try {
-                  await auth.logout();
-                  toast.success("Signed out");
-                } catch {
-                  toast.error("Could not sign out. Try again.");
-                }
-              }}
-            >
-              Log out
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              onClick={onLogin}
-            >
-              <LogIn size={15} /> Log in
-            </Button>
-          )}
-          <button
-            className="rounded-full border border-[var(--line)] p-2.5 md:hidden"
-            onClick={() => setOpen(!open)}
-          >
-            <Menu size={18} />
-          </button>
-        </div>
-      </div>
-      {open && (
-        <div className="border-t border-[var(--line)] px-5 py-4 md:hidden">
-          <div className="grid gap-2 text-sm font-semibold">
-            <button
-              className="py-2 text-left"
-              onClick={() => {
-                setLocation("/discover");
-                setOpen(false);
-              }}
-            >
-              Discover
-            </button>
-            <button
-              className="py-2 text-left"
-              onClick={() => {
-                setLocation("/briefs");
-                setOpen(false);
-              }}
-            >
-              Briefs
-            </button>
-            <button
-              className="py-2 text-left"
-              onClick={() => {
-                setLocation("/creator");
-                setOpen(false);
-              }}
-            >
-              Creator workspace
-            </button>
-            {currentRole === "creator" && (
-              <button
-                className="py-2 text-left"
-                onClick={() => {
-                  setLocation("/creator/portfolio");
-                  setOpen(false);
-                }}
-              >
-                Portfolio Studio
-              </button>
-            )}
-            <button
-              className="py-2 text-left"
-              onClick={() => {
-                setLocation("/requests");
-                setOpen(false);
-              }}
-            >
-              Collaboration requests
-            </button>
-            {auth.user ? (
-              <label className="flex items-center justify-between py-2 text-left">
-                Live account type
-                <select
-                  aria-label="Live account type"
-                  value={
-                    auth.user.accountType === "brand" ? "brand" : "creator"
-                  }
-                  disabled={accountTypeMutation.isPending}
-                  onChange={event =>
-                    accountTypeMutation.mutate({
-                      accountType: event.target.value as "creator" | "brand",
-                    })
-                  }
-                  className="rounded-lg border border-[var(--line)] bg-white px-2 py-1"
-                >
-                  <option value="creator">Creator</option>
-                  <option value="brand">Brand</option>
-                </select>
-              </label>
-            ) : (
-              <label className="flex items-center justify-between py-2 text-left">
-                Demo role
-                <select
-                  aria-label="Demo role"
-                  value={demoRole}
-                  onChange={event => setDemoRole(event.target.value)}
-                  className="rounded-lg border border-[var(--line)] bg-white px-2 py-1 capitalize"
-                >
-                  <option value="creator">Creator</option>
-                  <option value="brand">Brand</option>
-                </select>
-              </label>
-            )}
-            {currentRole === "brand" && (
-              <button
-                className="py-2 text-left"
-                onClick={() => {
-                  setLocation("/saved");
-                  setOpen(false);
-                }}
-              >
-                Saved creators
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </header>
-  );
-}
-
-function SideRail({ active, demoRole }: { active: string; demoRole: string }) {
-  const [, setLocation] = useLocation();
-  const items =
-    demoRole === "creator"
-      ? [
-          {
-            id: "creator",
-            label: "Workspace",
-            icon: LayoutDashboard,
-            path: "/creator",
-          },
-          {
-            id: "portfolio",
-            label: "Portfolio Studio",
-            icon: ImageIcon,
-            path: "/creator/portfolio",
-          },
-          {
-            id: "discover",
-            label: "Find briefs",
-            icon: Compass,
-            path: "/briefs",
-          },
-          {
-            id: "requests",
-            label: "Requests",
-            icon: HeartHandshake,
-            path: "/requests",
-          },
-        ]
-      : [
-          {
-            id: "brand",
-            label: "Overview",
-            icon: LayoutDashboard,
-            path: "/brand",
-          },
-          {
-            id: "discover",
-            label: "Find creators",
-            icon: Compass,
-            path: "/discover",
-          },
-          {
-            id: "briefs",
-            label: "My briefs",
-            icon: BriefcaseBusiness,
-            path: "/briefs",
-          },
-          {
-            id: "saved",
-            label: "Saved creators",
-            icon: Bookmark,
-            path: "/saved",
-          },
-          {
-            id: "requests",
-            label: "Requests",
-            icon: HeartHandshake,
-            path: "/requests",
-          },
-        ];
-  return (
-    <aside className="desktop-only w-[220px] shrink-0 border-r border-[var(--line)] bg-[#f5f6fa] px-4 py-6">
-      <div className="eyebrow mb-4 px-3">Workspace</div>
-      <div className="space-y-1">
-        {items.map(item => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setLocation(item.path)}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ${active === item.id ? "bg-white text-[var(--navy)] shadow-[0_4px_15px_rgba(16,20,35,.05)]" : "text-[#7d8598] hover:bg-white/70 hover:text-[var(--ink)]"}`}
-            >
-              <Icon size={16} />
-              {item.label}
-              {item.id === "requests" && (
-                <span className="ml-auto h-2 w-2 rounded-full bg-[var(--lime)]" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-12 rounded-2xl bg-[var(--navy)] p-4 text-white">
-        <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--lime)] text-[var(--navy)]">
-          <Zap size={16} />
-        </div>
-        <div className="text-sm font-bold">Your workspace is live.</div>
-        <p className="mt-1 text-xs leading-5 text-white/55">
-          Build a profile that gives the right people a reason to reach out.
-        </p>
-        <button
-          onClick={() =>
-            setLocation(demoRole === "creator" ? "/creator" : "/briefs/new")
-          }
-          className="mt-4 text-xs font-bold text-[var(--lime)]"
-        >
-          {demoRole === "creator" ? "Continue profile →" : "Publish a brief →"}
-        </button>
-      </div>
-    </aside>
-  );
-}
-
 function CreatorCard({
   creator,
   saved,
@@ -1339,14 +1009,14 @@ function CreatorWorkspace({
       projects: isLive
         ? []
         : [
-            {
-              title: "First project preview",
-              type: split(answers.types || "Concept work")[0],
-              image: seedCreators[1].projects[0].image,
-              description:
-                "A concept project. Add your own image, video, or asset when you publish.",
-            },
-          ],
+          {
+            title: "First project preview",
+            type: split(answers.types || "Concept work")[0],
+            image: seedCreators[1].projects[0].image,
+            description:
+              "A concept project. Add your own image, video, or asset when you publish.",
+          },
+        ],
     };
     return profile;
   };
@@ -1670,44 +1340,44 @@ function Profile({
                   p.impactSummary ||
                   p.skills ||
                   p.tools) && (
-                  <div className="grid gap-3 border-t border-[var(--line)] p-4 text-sm sm:grid-cols-2">
-                    {p.role && (
-                      <p>
-                        <strong>Role:</strong> {p.role}
-                      </p>
-                    )}
-                    {p.challenge && (
-                      <p>
-                        <strong>Challenge:</strong> {p.challenge}
-                      </p>
-                    )}
-                    {p.approach && (
-                      <p>
-                        <strong>Approach:</strong> {p.approach}
-                      </p>
-                    )}
-                    {p.outcomes && (
-                      <p>
-                        <strong>Outcomes:</strong> {p.outcomes}
-                      </p>
-                    )}
-                    {p.impactSummary && (
-                      <p>
-                        <strong>Impact:</strong> {p.impactSummary}
-                      </p>
-                    )}
-                    {p.skills && (
-                      <p>
-                        <strong>Skills:</strong> {p.skills}
-                      </p>
-                    )}
-                    {p.tools && (
-                      <p>
-                        <strong>Tools:</strong> {p.tools}
-                      </p>
-                    )}
-                  </div>
-                )}
+                    <div className="grid gap-3 border-t border-[var(--line)] p-4 text-sm sm:grid-cols-2">
+                      {p.role && (
+                        <p>
+                          <strong>Role:</strong> {p.role}
+                        </p>
+                      )}
+                      {p.challenge && (
+                        <p>
+                          <strong>Challenge:</strong> {p.challenge}
+                        </p>
+                      )}
+                      {p.approach && (
+                        <p>
+                          <strong>Approach:</strong> {p.approach}
+                        </p>
+                      )}
+                      {p.outcomes && (
+                        <p>
+                          <strong>Outcomes:</strong> {p.outcomes}
+                        </p>
+                      )}
+                      {p.impactSummary && (
+                        <p>
+                          <strong>Impact:</strong> {p.impactSummary}
+                        </p>
+                      )}
+                      {p.skills && (
+                        <p>
+                          <strong>Skills:</strong> {p.skills}
+                        </p>
+                      )}
+                      {p.tools && (
+                        <p>
+                          <strong>Tools:</strong> {p.tools}
+                        </p>
+                      )}
+                    </div>
+                  )}
               </article>
             ))}
           </div>
@@ -1939,15 +1609,15 @@ function BriefForm({
         setBriefs?.(
           existingBrief
             ? briefs.map(brief =>
-                brief.id === existingBrief.id
-                  ? {
-                      ...brief,
-                      ...values,
-                      id: existingBrief.id,
-                      creatorIds: existingBrief.creatorIds,
-                    }
-                  : brief
-              )
+              brief.id === existingBrief.id
+                ? {
+                  ...brief,
+                  ...values,
+                  id: existingBrief.id,
+                  creatorIds: existingBrief.creatorIds,
+                }
+                : brief
+            )
             : [...briefs, { id: `b${Date.now()}`, ...values, creatorIds: [] }]
         );
         toast.success(
@@ -2757,9 +2427,16 @@ export default function Home() {
     }
   );
   const requestsQuery = trpc.marketplace.requests.useQuery(undefined, {
-    enabled: isLive && path === "/requests" && (isCreator || isBrand),
+    enabled: isLive && (isCreator || isBrand),
     retry: false,
   });
+  // Only creators respond to requests, so only they get an "awaiting you" count.
+  const pendingRequests =
+    isLive && isCreator
+      ? ((requestsQuery.data || []) as LiveRequest[]).filter(
+        r => r.request.status === "sent"
+      ).length
+      : 0;
   const saveProfileMutation = trpc.marketplace.saveProfile.useMutation({
     onSuccess: async () => {
       await Promise.all([
@@ -2852,7 +2529,7 @@ export default function Home() {
     : demoSavedIds;
   const activeBriefs = isLive
     ? (isBrand ? myBriefsQuery.data : publicBriefsQuery.data)?.map(mapBrief) ||
-      []
+    []
     : briefs;
   const brandBriefs = isLive ? myBriefsQuery.data?.map(mapBrief) || [] : briefs;
   const ownCreator = ownProfileQuery.data
@@ -3268,24 +2945,16 @@ export default function Home() {
         }}
       />
     );
-  const active = path.startsWith("/discover")
-    ? "discover"
-    : path === "/creator/portfolio"
-      ? "portfolio"
-      : path.startsWith("/briefs")
-        ? "briefs"
-        : path.startsWith("/requests")
-          ? "requests"
-          : path === "/saved"
-            ? "saved"
-            : isBrand
-              ? "brand"
-              : "creator";
+  const navRole = isBrand ? "brand" : "creator";
+  const chrome = showsWorkspaceChrome(path);
+  useRouteChangeEffects(path);
   return (
     <div className="shell">
+      <SkipLink />
       <Topbar
         demoRole={activeRole}
         onLogin={() => setAuthDialogOpen(true)}
+        pendingRequests={pendingRequests}
         setDemoRole={role => {
           setDemoRole(role);
           localStorage.setItem(
@@ -3295,14 +2964,17 @@ export default function Home() {
         }}
       />
       <div className="flex">
-        <SideRail active={active} demoRole={activeRole} />
-        <main className="min-w-0 flex-1">
+        {chrome && <SideRail role={navRole} pendingRequests={pendingRequests} />}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={`min-w-0 flex-1 outline-none ${chrome ? "pb-24 md:pb-0" : ""}`}
+        >
+          {chrome && <Breadcrumbs path={path} role={navRole} />}
           {auth.user && (
             <div className="mx-auto max-w-[1440px] px-5 pt-4 text-xs text-[#8991a2] lg:px-10">
               Signed in as {auth.user.name || auth.user.email || "FrameFoundry user"}.{" "}
-              <span className="font-bold text-[var(--indigo)]">
-                Live account
-              </span>
+              <span className="font-bold text-[var(--indigo)]">Live account</span>
             </div>
           )}
           {auth.loading ? (
@@ -3317,6 +2989,7 @@ export default function Home() {
           )}
         </main>
       </div>
+      {chrome && <MobileTabBar role={navRole} pendingRequests={pendingRequests} />}
       <footer className="border-t border-[var(--line)] px-5 py-8 lg:px-10">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 text-xs text-[#8991a2] mobile-stack">
           <span>
