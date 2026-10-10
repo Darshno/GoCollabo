@@ -26,6 +26,7 @@ import {
   HeartHandshake,
   Image as ImageIcon,
   Plus,
+  RotateCcw,
   Search,
   Send,
   SlidersHorizontal,
@@ -34,6 +35,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { FilterDropdown } from "@/components/FilterDropdown";
 
 const PortfolioStudio = lazy(() => import("@/pages/PortfolioStudio"));
 
@@ -577,6 +579,25 @@ function Discover({
     "All styles",
     ...Array.from(new Set(creators.flatMap(c => c.styles))),
   ];
+  const allModes = ["Any mode", "remote", "hybrid", "on-site"];
+  const allSorts = ["Featured", "Name", "Available"];
+  const formatMode = (v: string) => {
+    if (v === "remote") return "Remote";
+    if (v === "hybrid") return "Hybrid";
+    if (v === "on-site") return "On-site";
+    return v;
+  };
+  const hasActiveFilters = Boolean(
+    query.trim() ||
+      type !== "All work" ||
+      style !== "All styles" ||
+      mode !== "Any mode"
+  );
+  const activeFilterCount =
+    (query.trim() ? 1 : 0) +
+    (type !== "All work" ? 1 : 0) +
+    (style !== "All styles" ? 1 : 0) +
+    (mode !== "Any mode" ? 1 : 0);
   const filtered = useMemo(() => {
     let list = creators.filter(c => {
       const hay = [
@@ -632,65 +653,102 @@ function Discover({
           </div>
         </div>
       </div>
-      <div className="mt-10 surface p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl bg-[#f5f6fa] px-3 py-2.5">
-            <Search size={16} className="text-[#98a0b1]" />
+      <div className="mt-10 w-full max-w-full rounded-2xl border border-[#0B0D12]/15 bg-white p-3 shadow-[0_4px_20px_rgba(11,13,18,0.03)]">
+        <div className="flex w-full flex-wrap items-center gap-2">
+          <div className="group relative flex h-10 w-full sm:w-auto sm:flex-1 sm:min-w-[220px] lg:min-w-[240px] min-w-0 items-center gap-2 rounded-xl border border-[#0B0D12]/15 bg-[#F8F7F2] px-3 transition-all duration-150 hover:border-[#C8F568] hover:shadow-[0_1px_6px_rgba(200,245,104,0.15)] focus-within:border-[#0B0D12] focus-within:ring-2 focus-within:ring-[#C8F568]/40">
+            <Search
+              size={15}
+              className="text-[#0B0D12]/70 shrink-0 transition-colors group-focus-within:text-[#0B0D12]"
+            />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search names, tools, skills…"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-[#a2a8b7]"
+              placeholder="Search names, tools,skill"
+              aria-label="Search creators by name, tool, or skill"
+              className="w-full min-w-0 bg-transparent text-xs sm:text-[13px] font-medium text-[#0B0D12] outline-none placeholder:text-[#8A8D98]"
             />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search text"
+                className="text-[#8A8D98] hover:text-[#0B0D12] rounded-full p-1 hover:bg-[#0B0D12]/5 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#0B0D12]"
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
-          <select
+          <FilterDropdown
             value={type}
-            onChange={e => setType(e.target.value)}
-            className="rounded-xl border-0 bg-[#f5f6fa] px-3 py-2.5 text-sm font-semibold outline-none"
-          >
-            {allTypes.map(v => (
-              <option key={v}>{v}</option>
-            ))}
-          </select>
-          <select
+            onChange={setType}
+            options={allTypes}
+            label="Work"
+            ariaLabel="Filter by work category"
+            defaultValue="All work"
+          />
+          <FilterDropdown
             value={style}
-            onChange={e => setStyle(e.target.value)}
-            className="rounded-xl border-0 bg-[#f5f6fa] px-3 py-2.5 text-sm font-semibold outline-none"
-          >
-            {allStyles.map(v => (
-              <option key={v}>{v}</option>
-            ))}
-          </select>
-          <select
+            onChange={setStyle}
+            options={allStyles}
+            label="Style"
+            ariaLabel="Filter by visual style"
+            defaultValue="All styles"
+          />
+          <FilterDropdown
             value={mode}
-            onChange={e => setMode(e.target.value)}
-            className="rounded-xl border-0 bg-[#f5f6fa] px-3 py-2.5 text-sm font-semibold outline-none"
-          >
-            <option>Any mode</option>
-            <option>remote</option>
-            <option>hybrid</option>
-            <option>on-site</option>
-          </select>
-          <select
+            onChange={setMode}
+            options={allModes}
+            label="Mode"
+            ariaLabel="Filter by work arrangement"
+            defaultValue="Any mode"
+            formatOptionLabel={formatMode}
+          />
+          <FilterDropdown
             value={sort}
-            onChange={e => setSort(e.target.value)}
-            className="rounded-xl border-0 bg-[#f5f6fa] px-3 py-2.5 text-sm font-semibold outline-none"
-          >
-            <option>Featured</option>
-            <option>Name</option>
-            <option>Available</option>
-          </select>
-          <Button
-            variant="ghost"
+            onChange={setSort}
+            options={allSorts}
+            label="Sort"
+            ariaLabel="Sort creators"
+            defaultValue="Featured"
+            align="end"
+          />
+          <button
+            type="button"
+            disabled={!hasActiveFilters}
             onClick={() => {
               setQuery("");
               setType("All work");
               setStyle("All styles");
               setMode("Any mode");
             }}
+            className={`group h-10 shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium tracking-[-0.01em] transition-all duration-150 outline-none select-none focus-visible:ring-2 focus-visible:ring-[#0B0D12] focus-visible:ring-offset-1 ${
+              hasActiveFilters
+                ? "text-[#0B0D12] hover:bg-[#C8F568]/25 hover:text-[#0B0D12] active:scale-95 cursor-pointer"
+                : "text-[#0B0D12]/55 hover:text-[#0B0D12] hover:bg-[#0B0D12]/5 disabled:cursor-default"
+            }`}
+            aria-label="Reset all applied filters"
           >
-            <Filter size={15} /> Clear
-          </Button>
+            {hasActiveFilters && (
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-[#C8F568] border border-[#0B0D12]/30 shrink-0"
+                aria-hidden="true"
+              />
+            )}
+            <RotateCcw
+              size={12}
+              className={`transition-transform duration-200 group-hover:rotate-[-45deg] shrink-0 ${
+                hasActiveFilters
+                  ? "text-[#0B0D12]"
+                  : "text-[#0B0D12]/50 group-hover:text-[#0B0D12]"
+              }`}
+            />
+            <span>Reset</span>
+            {hasActiveFilters && (
+              <span className="flex h-3.5 min-w-3.5 px-1 items-center justify-center rounded-full bg-[#0B0D12] text-[9px] font-bold text-[#C8F568]">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
         </div>
       </div>
       <div className="mt-8 flex items-center justify-between">
