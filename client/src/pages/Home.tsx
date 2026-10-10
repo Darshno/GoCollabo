@@ -26,7 +26,6 @@ import {
   HeartHandshake,
   Image as ImageIcon,
   Plus,
-  RotateCcw,
   Search,
   Send,
   SlidersHorizontal,
@@ -35,8 +34,6 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { FilterDropdown } from "@/components/FilterDropdown";
-import { formatRate, formatBudget, type CurrencyCode } from "@shared/rates";
 
 const PortfolioStudio = lazy(() => import("@/pages/PortfolioStudio"));
 
@@ -54,7 +51,6 @@ type Creator = {
   styles: string[];
   experience: string;
   rates: string;
-  currency?: CurrencyCode | string;
   formats: string[];
   availability: string;
   verification: string;
@@ -84,7 +80,6 @@ type Brief = {
   style: string;
   platform: string;
   budget: string;
-  currency?: CurrencyCode | string;
   deadline: string;
   status: "draft" | "published" | "closed";
   audience?: string;
@@ -96,7 +91,7 @@ type Brief = {
   licensing?: string;
   creatorIds: string[];
 };
-export type PersistedCreator = {
+type PersistedCreator = {
   profile: {
     id: number;
     slug: string;
@@ -111,7 +106,6 @@ export type PersistedCreator = {
     styles: string;
     experience: string;
     rates: string | null;
-    currency?: string | null;
     formats: string;
     workflow: string;
     verificationStatus: string;
@@ -134,7 +128,7 @@ export type PersistedCreator = {
     tools: string | null;
   }>;
 };
-export type PersistedBrief = {
+type PersistedBrief = {
   id: number;
   title: string;
   objective: string;
@@ -146,7 +140,6 @@ export type PersistedBrief = {
   aspectRatio: string;
   deliverables: number;
   budget: string;
-  currency?: string | null;
   deadline: string;
   location: string;
   workMode: WorkMode;
@@ -154,7 +147,7 @@ export type PersistedBrief = {
   status: "draft" | "published" | "closed";
 };
 
-export function mapCreator(record: PersistedCreator): Creator {
+function mapCreator(record: PersistedCreator): Creator {
   const { profile } = record;
   return {
     id: String(profile.id),
@@ -169,7 +162,6 @@ export function mapCreator(record: PersistedCreator): Creator {
     styles: split(profile.styles),
     experience: profile.experience,
     rates: profile.rates || "Range not shared",
-    currency: (profile as { currency?: string | null }).currency || undefined,
     formats: split(profile.formats),
     availability: profile.availability,
     verification: profile.verificationStatus.toUpperCase(),
@@ -193,7 +185,7 @@ export function mapCreator(record: PersistedCreator): Creator {
   };
 }
 
-export function mapBrief(brief: PersistedBrief): Brief {
+function mapBrief(brief: PersistedBrief): Brief {
   return {
     id: String(brief.id),
     title: brief.title,
@@ -202,7 +194,6 @@ export function mapBrief(brief: PersistedBrief): Brief {
     style: brief.style,
     platform: brief.platform,
     budget: brief.budget,
-    currency: (brief as { currency?: string | null }).currency || undefined,
     deadline: brief.deadline,
     status: brief.status,
     audience: brief.audience,
@@ -219,23 +210,21 @@ export function mapBrief(brief: PersistedBrief): Brief {
 const seedCreators: Creator[] = [
   {
     id: "c1",
-    slug: "ananya-sharma",
-    name: "Ananya Sharma",
-    headline:
-      "AI filmmaker · Cinematic worlds, atmospheric storytelling, and experimental visuals",
-    location: "Mumbai, India",
+    slug: "mara-chen",
+    name: "Mara Chen",
+    headline: "Director + visual systems designer for impossible worlds",
+    location: "Los Angeles, CA",
     mode: "remote",
-    skills: ["AI filmmaking", "Direction", "Worldbuilding"],
+    skills: ["Direction", "Worldbuilding", "Compositing"],
     tools: ["Runway", "ComfyUI", "After Effects"],
-    types: ["AI short film", "Film", "Editorial"],
-    styles: ["Cinematic", "Surreal", "Textural"],
+    types: ["Film", "Brand film", "Editorial"],
+    styles: ["Surreal", "Cinematic", "Textural"],
     experience: "6–8 years",
-    rates: "₹15,000–₹45,000 / project",
-    currency: "INR",
+    rates: "$2.5k–$8k / project",
     formats: ["16:9", "9:16", "1:1"],
-    availability: "Available now",
+    availability: "Available in November",
     verification: "SELF-REPORTED",
-    bio: "Ananya is an AI filmmaker exploring cinematic storytelling, visual atmosphere, and experimental AI-generated worlds. Her work focuses on cinematic worlds, atmospheric storytelling, and experimental visuals.",
+    bio: "Mara builds cinematic worlds that feel discovered rather than designed. Her work moves between atmospheric short films, launch films, and visual identity systems for teams working at the edge of culture.",
     workflow:
       "A tight concept loop, visual reference pass, then rapid look development before production. Every delivery includes organized source files and a usage note.",
     projects: [
@@ -244,12 +233,11 @@ const seedCreators: Creator[] = [
         type: "AI short film",
         image:
           "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200&q=85",
-        description:
-          "A speculative film exploring memory and atmospheric landscapes.",
+        description: "A speculative film about memory, rendered as weather.",
       },
       {
         title: "Solace / 03",
-        type: "Atmospheric world",
+        type: "Brand world",
         image:
           "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200&q=85",
         description: "Atmospheric launch system for a new ritual object.",
@@ -257,33 +245,30 @@ const seedCreators: Creator[] = [
       },
       {
         title: "Soft Geometry",
-        type: "Experimental motion",
+        type: "Editorial motion",
         image:
           "https://images.unsplash.com/photo-1500534623283-312aade485b7?w=1200&q=85",
-        description:
-          "A moving study in light, skin, and architectural rhythm.",
+        description: "A moving study in light, skin, and architectural rhythm.",
       },
     ],
   },
   {
     id: "c2",
-    slug: "arjun-mehta",
-    name: "Arjun Mehta",
-    headline:
-      "AI motion designer · Bold motion systems and playful visual identities for emerging brands",
-    location: "Bengaluru, India",
+    slug: "noah-williams",
+    name: "Noah Williams",
+    headline: "AI animator making joyful, precise brand motion",
+    location: "London, UK",
     mode: "hybrid",
-    skills: ["AI motion design", "3D animation", "Visual identity"],
+    skills: ["3D animation", "Motion design", "Character"],
     tools: ["Blender", "Sora", "Cinema 4D"],
-    types: ["Product story", "Social", "Explainer"],
+    types: ["Social", "Product film", "Explainer"],
     styles: ["Playful", "Graphic", "Warm"],
     experience: "4–6 years",
-    rates: "₹12,000–₹35,000 / project",
-    currency: "INR",
+    rates: "$1.8k–$5k / project",
     formats: ["9:16", "1:1", "4:5"],
     availability: "Open for one project",
     verification: "SELF-REPORTED",
-    bio: "Arjun is an AI motion designer developing expressive visual systems and motion-led product storytelling. He builds bold motion systems and playful visual identities for emerging brands.",
+    bio: "Noah combines classic motion discipline with generative play. He is especially good at translating a fuzzy product truth into a visual system that can scale across a campaign.",
     workflow:
       "Storyboard in frames, prototype movement early, then build a small reusable motion language so every cut feels related.",
     projects: [
@@ -292,16 +277,14 @@ const seedCreators: Creator[] = [
         type: "Product story",
         image:
           "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&q=85",
-        description:
-          "A playful product story for emerging brands and modern tools.",
+        description: "A playful product film for a world that is already here.",
       },
       {
         title: "Melt / Move",
         type: "Motion identity",
         image:
           "https://images.unsplash.com/photo-1518640467707-6811f4a6ab73?w=1200&q=85",
-        description:
-          "A warm, elastic visual language for a culture platform.",
+        description: "A warm, elastic visual language for a culture platform.",
         concept: true,
       },
       {
@@ -315,23 +298,21 @@ const seedCreators: Creator[] = [
   },
   {
     id: "c3",
-    slug: "meera-nair",
-    name: "Meera Nair",
-    headline:
-      "Generative artist · Contemporary Indian aesthetics, experimental textures, and future-facing fashion",
-    location: "Kochi, India",
+    slug: "aisha-kim",
+    name: "Aisha Kim",
+    headline: "Generative artist for fashion, music, and future-facing culture",
+    location: "Seoul, KR",
     mode: "remote",
-    skills: ["Generative art", "Art direction", "Fashion imagery"],
+    skills: ["Image making", "Art direction", "Styleframes"],
     tools: ["Midjourney", "Krea", "Photoshop"],
-    types: ["Fashion campaign", "Campaign", "Editorial"],
-    styles: ["Editorial", "Chromatic", "Textural"],
+    types: ["Campaign", "Cover art", "Social"],
+    styles: ["Editorial", "Chromatic", "Human"],
     experience: "3–5 years",
-    rates: "₹20,000–₹60,000 / project",
-    currency: "INR",
+    rates: "$900–$3k / project",
     formats: ["4:5", "1:1", "16:9"],
-    availability: "Available in November",
+    availability: "Available now",
     verification: "SELF-REPORTED",
-    bio: "Meera is a generative artist exploring fashion imagery, material experimentation, and contemporary visual culture. Her work brings together contemporary Indian aesthetics, experimental textures, and future-facing fashion.",
+    bio: "Aisha makes images that hold attention at thumb speed. Her practice is rooted in fashion image-making but expands into tactile worlds, campaign systems, and album environments.",
     workflow:
       "Start with a visual tension, collect a precise reference wall, then create a small set of hero frames before expanding into a family of assets.",
     projects: [
@@ -341,15 +322,14 @@ const seedCreators: Creator[] = [
         image:
           "https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=1200&q=85",
         description:
-          "Chromatic portraiture for a collection exploring tactile textures and modern forms.",
+          "Chromatic portraiture for a collection built around threshold states.",
       },
       {
         title: "Nite Bloom",
         type: "Cover world",
         image:
           "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200&q=85",
-        description:
-          "A nocturnal visual system combining botanical textures with digital craft.",
+        description: "A nocturnal visual system for an electronic record.",
         concept: true,
       },
       {
@@ -363,23 +343,21 @@ const seedCreators: Creator[] = [
   },
   {
     id: "c4",
-    slug: "kabir-malhotra",
-    name: "Kabir Malhotra",
-    headline:
-      "Experimental filmmaker · Documentary-inspired visuals blending Indian urban culture with AI filmmaking",
-    location: "New Delhi, India",
+    slug: "leo-martins",
+    name: "Leo Martins",
+    headline: "Experimental filmmaker blending documentary texture with AI",
+    location: "São Paulo, BR",
     mode: "remote",
-    skills: ["Experimental filmmaking", "Documentary", "Editing"],
+    skills: ["Editing", "Documentary", "Sound"],
     tools: ["DaVinci Resolve", "Runway", "ElevenLabs"],
-    types: ["Short film", "Film", "Documentary"],
-    styles: ["Raw", "Human", "Cinematic"],
+    types: ["Film", "Music video", "Documentary"],
+    styles: ["Raw", "Human", "Noir"],
     experience: "8–10 years",
-    rates: "₹18,000–₹50,000 / project",
-    currency: "INR",
+    rates: "$3k–$12k / project",
     formats: ["16:9", "2.39:1", "9:16"],
     availability: "Waitlist only",
     verification: "NOT VERIFIED",
-    bio: "Kabir is an experimental filmmaker combining documentary-inspired observation with contemporary AI filmmaking. His projects feature documentary-inspired visuals blending Indian urban culture with AI filmmaking.",
+    bio: "Leo works with the friction between a real voice and an impossible image. He brings documentary instincts to synthetic production, keeping emotion before spectacle.",
     workflow:
       "Find the real human beat first. Build references around it, then use generative tools only where they give the story a new pressure or texture.",
     projects: [
@@ -388,8 +366,7 @@ const seedCreators: Creator[] = [
         type: "Short film",
         image:
           "https://images.unsplash.com/photo-1519999482648-25049ddd37b1?w=1200&q=85",
-        description:
-          "A documentary-inspired nocturne observing city light and urban rhythms.",
+        description: "A nocturne about the people who keep the lights on.",
       },
       {
         title: "Pulses",
@@ -404,8 +381,183 @@ const seedCreators: Creator[] = [
         type: "Documentary study",
         image:
           "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=85",
-        description:
-          "Observational fragments exploring modern Indian cities and streetscapes.",
+        description: "Fragments from a city learning a new language.",
+      },
+    ],
+  },
+  {
+    id: "c5",
+    slug: "ananya-sharma",
+    name: "Ananya Sharma",
+    headline: "Brand filmmaker and visual storyteller rooted in Indian everyday life",
+    location: "Mumbai, IN",
+    mode: "remote",
+    skills: ["Direction", "Art direction", "Storyboarding"],
+    tools: ["Runway", "DaVinci Resolve", "Premiere Pro"],
+    types: ["Brand film", "Social", "Documentary"],
+    styles: ["Warm", "Human", "Cinematic"],
+    experience: "4–6 years",
+    rates: "₹15,000–₹45,000 / project",
+    formats: ["16:9", "9:16", "1:1"],
+    availability: "Available now",
+    verification: "SELF-REPORTED",
+    bio: "Ananya brings warmth and cultural specificity to brand films. She works with founders and creative teams who want stories that feel rooted — not produced.",
+    workflow:
+      "Research, reference, brief alignment. Then a fast prototype round before full production. Always delivers a usage note alongside final files.",
+    projects: [
+      {
+        title: "The Kirana Corner",
+        type: "Brand documentary",
+        image:
+          "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=85",
+        description: "A portrait of a neighbourhood store reinventing itself for a new generation.",
+      },
+      {
+        title: "Monsoon Rituals",
+        type: "Campaign film",
+        image:
+          "https://images.unsplash.com/photo-1518709766631-a6a7f45921c3?w=1200&q=85",
+        description: "A seasonal launch film built around the textures and sounds of rain.",
+        concept: true,
+      },
+      {
+        title: "Handmade / Homegrown",
+        type: "Social series",
+        image:
+          "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200&q=85",
+        description: "Short-form content celebrating artisan makers across Maharashtra.",
+      },
+    ],
+  },
+  {
+    id: "c6",
+    slug: "arjun-mehta",
+    name: "Arjun Mehta",
+    headline: "Motion designer translating Indian visual culture into modern brand motion",
+    location: "Bengaluru, IN",
+    mode: "hybrid",
+    skills: ["Motion design", "Typography", "3D animation"],
+    tools: ["After Effects", "Blender", "Cinema 4D"],
+    types: ["Social", "Explainer", "Brand film"],
+    styles: ["Graphic", "Playful", "Bold"],
+    experience: "3–5 years",
+    rates: "₹12,000–₹35,000 / project",
+    formats: ["9:16", "1:1", "4:5"],
+    availability: "Open for one project",
+    verification: "SELF-REPORTED",
+    bio: "Arjun designs motion that feels both contemporary and grounded. He works best with brands that have something specific to say and want it said with clarity and energy.",
+    workflow:
+      "Styleframes first, motion principles second. He prototypes key transitions early so clients understand the rhythm before production begins.",
+    projects: [
+      {
+        title: "Stack & Flow",
+        type: "Motion identity",
+        image:
+          "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=85",
+        description: "A dynamic brand motion system for a Bengaluru-based fintech.",
+      },
+      {
+        title: "Festival Pack",
+        type: "Social series",
+        image:
+          "https://images.unsplash.com/photo-1567521464027-f127ff144326?w=1200&q=85",
+        description: "A festive motion library adaptable across Diwali, Holi, and Eid campaigns.",
+        concept: true,
+      },
+      {
+        title: "Launch Day",
+        type: "Explainer film",
+        image:
+          "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&q=85",
+        description: "A sixty-second animated explainer for a SaaS product launch.",
+      },
+    ],
+  },
+  {
+    id: "c7",
+    slug: "meera-nair",
+    name: "Meera Nair",
+    headline: "Editorial photographer and AI image-maker for fashion and lifestyle brands",
+    location: "Chennai, IN",
+    mode: "remote",
+    skills: ["Photography", "Image making", "Art direction"],
+    tools: ["Midjourney", "Lightroom", "Photoshop"],
+    types: ["Campaign", "Editorial", "Cover art"],
+    styles: ["Editorial", "Minimal", "Textural"],
+    experience: "5–7 years",
+    rates: "₹20,000–₹60,000 / project",
+    formats: ["1:1", "4:5", "16:9"],
+    availability: "Available in November",
+    verification: "SELF-REPORTED",
+    bio: "Meera works at the intersection of traditional South Indian aesthetics and contemporary editorial sensibility. Her images are spare, precise, and carry a distinct cultural voice.",
+    workflow:
+      "Mood board, colour palette, and hero composition before touching any tool. Delivers selects at full resolution with colour-graded and raw variants.",
+    projects: [
+      {
+        title: "Silk Route",
+        type: "Fashion editorial",
+        image:
+          "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&q=85",
+        description: "A contemporary editorial reframing traditional handloom fabric.",
+      },
+      {
+        title: "Quiet Objects",
+        type: "Still-life campaign",
+        image:
+          "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1200&q=85",
+        description: "Product stills for a home fragrance brand built on restraint.",
+        concept: true,
+      },
+      {
+        title: "The Long Table",
+        type: "Campaign",
+        image:
+          "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&q=85",
+        description: "A food-brand campaign celebrating the ritual of the communal meal.",
+      },
+    ],
+  },
+  {
+    id: "c8",
+    slug: "kabir-malhotra",
+    name: "Kabir Malhotra",
+    headline: "Generative filmmaker and music video director exploring new Indian cinema",
+    location: "Delhi, IN",
+    mode: "on-site",
+    skills: ["Direction", "Editing", "Sound design"],
+    tools: ["Runway", "DaVinci Resolve", "Sora"],
+    types: ["Film", "Music video", "Brand film"],
+    styles: ["Surreal", "Raw", "Noir"],
+    experience: "6–8 years",
+    rates: "₹18,000–₹50,000 / project",
+    formats: ["16:9", "2.39:1", "9:16"],
+    availability: "Booked until January",
+    verification: "SELF-REPORTED",
+    bio: "Kabir makes films that feel genuinely uncomfortable and genuinely Indian. He brings a documentary instinct to generative production, always looking for the real texture behind the synthetic image.",
+    workflow:
+      "Script a clear emotional arc first. Generative tools come in at look development — never to generate ideas, only to execute them with more precision than conventional production allows.",
+    projects: [
+      {
+        title: "Raat Baaki",
+        type: "Music video",
+        image:
+          "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1200&q=85",
+        description: "A nocturnal music video blending Delhi street texture with synthetic light.",
+      },
+      {
+        title: "The Hollow Season",
+        type: "Short film",
+        image:
+          "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200&q=85",
+        description: "A speculative film about a city between two versions of itself.",
+        concept: true,
+      },
+      {
+        title: "Farmhouse Brand Film",
+        type: "Brand film",
+        image:
+          "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200&q=85",
+        description: "An atmospheric launch film for an organic food brand from Haryana.",
       },
     ],
   },
@@ -420,7 +572,6 @@ const seedBriefs: Brief[] = [
     style: "Human, tactile, optimistic",
     platform: "Paid social + site",
     budget: "₹4,00,000–₹8,00,000",
-    currency: "INR",
     deadline: "Nov 18, 2026",
     status: "published",
     creatorIds: [],
@@ -433,7 +584,6 @@ const seedBriefs: Brief[] = [
     style: "Editorial, warm, considered",
     platform: "Instagram + OOH",
     budget: "₹1,50,000–₹4,00,000",
-    currency: "INR",
     deadline: "Dec 02, 2026",
     status: "draft",
     creatorIds: [],
@@ -448,7 +598,7 @@ function loadState() {
     return {};
   }
 }
-export function split(value: string) {
+function split(value: string) {
   return value
     .split(",")
     .map(v => v.trim())
@@ -590,7 +740,6 @@ function Discover({
   isDemoData?: boolean;
   allowSave?: boolean;
 }) {
-  const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
   const [type, setType] = useState("All work");
   const [mode, setMode] = useState("Any mode");
@@ -604,25 +753,6 @@ function Discover({
     "All styles",
     ...Array.from(new Set(creators.flatMap(c => c.styles))),
   ];
-  const allModes = ["Any mode", "remote", "hybrid", "on-site"];
-  const allSorts = ["Featured", "Name", "Available"];
-  const formatMode = (v: string) => {
-    if (v === "remote") return "Remote";
-    if (v === "hybrid") return "Hybrid";
-    if (v === "on-site") return "On-site";
-    return v;
-  };
-  const hasActiveFilters = Boolean(
-    query.trim() ||
-      type !== "All work" ||
-      style !== "All styles" ||
-      mode !== "Any mode"
-  );
-  const activeFilterCount =
-    (query.trim() ? 1 : 0) +
-    (type !== "All work" ? 1 : 0) +
-    (style !== "All styles" ? 1 : 0) +
-    (mode !== "Any mode" ? 1 : 0);
   const filtered = useMemo(() => {
     let list = creators.filter(c => {
       const hay = [
@@ -678,102 +808,65 @@ function Discover({
           </div>
         </div>
       </div>
-      <div className="mt-10 w-full max-w-full rounded-2xl border border-[#0B0D12]/15 bg-white p-3 shadow-[0_4px_20px_rgba(11,13,18,0.03)]">
-        <div className="flex w-full flex-wrap items-center gap-2">
-          <div className="group relative flex h-10 w-full sm:w-auto sm:flex-1 sm:min-w-[220px] lg:min-w-[240px] min-w-0 items-center gap-2 rounded-xl border border-[#0B0D12]/15 bg-[#F8F7F2] px-3 transition-all duration-150 hover:border-[#C8F568] hover:shadow-[0_1px_6px_rgba(200,245,104,0.15)] focus-within:border-[#0B0D12] focus-within:ring-2 focus-within:ring-[#C8F568]/40">
-            <Search
-              size={15}
-              className="text-[#0B0D12]/70 shrink-0 transition-colors group-focus-within:text-[#0B0D12]"
-            />
+      <div className="mt-10 surface p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl bg-[#f5f6fa] px-3 py-2.5">
+            <Search size={16} className="text-[#98a0b1]" />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search names, tools,skill"
-              aria-label="Search creators by name, tool, or skill"
-              className="w-full min-w-0 bg-transparent text-xs sm:text-[13px] font-medium text-[#0B0D12] outline-none placeholder:text-[#8A8D98]"
+              placeholder="Search names, tools, skills…"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-[#a2a8b7]"
             />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search text"
-                className="text-[#8A8D98] hover:text-[#0B0D12] rounded-full p-1 hover:bg-[#0B0D12]/5 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#0B0D12]"
-              >
-                <X size={13} />
-              </button>
-            )}
           </div>
-          <FilterDropdown
+          <select
             value={type}
-            onChange={setType}
-            options={allTypes}
-            label="Work"
-            ariaLabel="Filter by work category"
-            defaultValue="All work"
-          />
-          <FilterDropdown
+            onChange={e => setType(e.target.value)}
+            className="rounded-xl border-0 bg-[#f5f6fa] px-3 py-2.5 text-sm font-semibold outline-none"
+          >
+            {allTypes.map(v => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
+          <select
             value={style}
-            onChange={setStyle}
-            options={allStyles}
-            label="Style"
-            ariaLabel="Filter by visual style"
-            defaultValue="All styles"
-          />
-          <FilterDropdown
+            onChange={e => setStyle(e.target.value)}
+            className="rounded-xl border-0 bg-[#f5f6fa] px-3 py-2.5 text-sm font-semibold outline-none"
+          >
+            {allStyles.map(v => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
+          <select
             value={mode}
-            onChange={setMode}
-            options={allModes}
-            label="Mode"
-            ariaLabel="Filter by work arrangement"
-            defaultValue="Any mode"
-            formatOptionLabel={formatMode}
-          />
-          <FilterDropdown
+            onChange={e => setMode(e.target.value)}
+            className="rounded-xl border-0 bg-[#f5f6fa] px-3 py-2.5 text-sm font-semibold outline-none"
+          >
+            <option>Any mode</option>
+            <option>remote</option>
+            <option>hybrid</option>
+            <option>on-site</option>
+          </select>
+          <select
             value={sort}
-            onChange={setSort}
-            options={allSorts}
-            label="Sort"
-            ariaLabel="Sort creators"
-            defaultValue="Featured"
-            align="end"
-          />
-          <button
-            type="button"
-            disabled={!hasActiveFilters}
+            onChange={e => setSort(e.target.value)}
+            className="rounded-xl border-0 bg-[#f5f6fa] px-3 py-2.5 text-sm font-semibold outline-none"
+          >
+            <option>Featured</option>
+            <option>Name</option>
+            <option>Available</option>
+          </select>
+          <Button
+            variant="ghost"
             onClick={() => {
               setQuery("");
               setType("All work");
               setStyle("All styles");
               setMode("Any mode");
             }}
-            className={`group h-10 shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium tracking-[-0.01em] transition-all duration-150 outline-none select-none focus-visible:ring-2 focus-visible:ring-[#0B0D12] focus-visible:ring-offset-1 ${
-              hasActiveFilters
-                ? "text-[#0B0D12] hover:bg-[#C8F568]/25 hover:text-[#0B0D12] active:scale-95 cursor-pointer"
-                : "text-[#0B0D12]/55 hover:text-[#0B0D12] hover:bg-[#0B0D12]/5 disabled:cursor-default"
-            }`}
-            aria-label="Reset all applied filters"
           >
-            {hasActiveFilters && (
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-[#C8F568] border border-[#0B0D12]/30 shrink-0"
-                aria-hidden="true"
-              />
-            )}
-            <RotateCcw
-              size={12}
-              className={`transition-transform duration-200 group-hover:rotate-[-45deg] shrink-0 ${
-                hasActiveFilters
-                  ? "text-[#0B0D12]"
-                  : "text-[#0B0D12]/50 group-hover:text-[#0B0D12]"
-              }`}
-            />
-            <span>Reset</span>
-            {hasActiveFilters && (
-              <span className="flex h-3.5 min-w-3.5 px-1 items-center justify-center rounded-full bg-[#0B0D12] text-[9px] font-bold text-[#C8F568]">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
+            <Filter size={15} /> Clear
+          </Button>
         </div>
       </div>
       <div className="mt-8 flex items-center justify-between">
@@ -797,36 +890,13 @@ function Discover({
             />
           ))}
         </div>
-      ) : creators.length === 0 ? (
-        <div className="surface mt-4 flex min-h-[280px] flex-col items-center justify-center p-8 text-center">
-          <SlidersHorizontal size={28} className="text-[#a1a8b8]" />
-          <h3 className="mt-4 font-bold">No published creators yet</h3>
-          <p className="mt-1 text-sm text-[#687087]">
-            Be the first creator to showcase your work on GoCollabo.
-          </p>
-          <Button className="mt-4" onClick={() => setLocation("/creator")}>
-            Build your profile
-          </Button>
-        </div>
       ) : (
-        <div className="surface mt-4 flex min-h-[280px] flex-col items-center justify-center p-8 text-center">
+        <div className="surface mt-4 flex min-h-[260px] flex-col items-center justify-center text-center">
           <SlidersHorizontal size={28} className="text-[#a1a8b8]" />
           <h3 className="mt-4 font-bold">No creators match those filters.</h3>
           <p className="mt-1 text-sm text-[#687087]">
-            Try a broader search term, or reset your filters.
+            Try a broader style, tool, or work mode.
           </p>
-          <Button
-            variant="ghost"
-            className="mt-4"
-            onClick={() => {
-              setQuery("");
-              setType("All work");
-              setStyle("All styles");
-              setMode("Any mode");
-            }}
-          >
-            Clear all filters
-          </Button>
         </div>
       )}
     </div>
@@ -1077,7 +1147,7 @@ function CreatorWorkspace({
       key: "rates",
       label: "Want to share a typical range?",
       hint: "Optional — visibility is your choice",
-      placeholder: "e.g. ₹15,000–₹45,000 / project",
+      placeholder: "e.g. ₹1,50,000–₹4,00,000 / project or $2k–$5k / project",
     },
     {
       key: "workflow",
@@ -1106,7 +1176,6 @@ function CreatorWorkspace({
       styles: split(answers.styles || "Original"),
       experience: answers.experience || "Experience shared on request",
       rates: answers.rates || "Range not shared",
-      currency: answers.rates?.includes("$") ? "USD" : "INR",
       formats: split(answers.formats || "16:9"),
       availability: "Available for conversations",
       verification: "SELF-REPORTED",
@@ -1201,7 +1270,7 @@ function CreatorWorkspace({
           <div className="mt-16 max-w-xl">
             <div className="h-1 w-full rounded-full bg-[#eef0f5]">
               <div
-                className="h-1 rounded-full bg-[#0B0D12] transition-all"
+                className="h-1 rounded-full bg-[var(--indigo)] transition-all"
                 style={{ width: `${((step + 1) / questions.length) * 100}%` }}
               />
             </div>
@@ -1523,7 +1592,7 @@ function Profile({
                 </div>
                 <div>
                   <div className="eyebrow mb-1">Rates</div>
-                  <div className="font-bold">{formatRate(creator)}</div>
+                  <div className="font-bold">{creator.rates}</div>
                 </div>
                 <div>
                   <div className="eyebrow mb-1">Formats</div>
@@ -1564,50 +1633,26 @@ function Profile({
               Choose a brief and add a note. This sends a request — it does not
               start a contract or payment.
             </p>
-            {briefs.filter(brief => brief.status === "published").length === 0 ? (
-              <div className="mt-6 rounded-xl border border-dashed border-[#8A8D98]/40 bg-[#f7f8fb] p-4 text-center text-xs text-[#687087]">
-                <p className="font-semibold text-[#0B0D12]">No published briefs found</p>
-                <p className="mt-1">You must publish a brief before inviting a creator to collaborate.</p>
-                <Button
-                  className="mt-3"
-                  onClick={() => {
-                    setRequestOpen(false);
-                    setLocation("/briefs/new");
-                  }}
-                >
-                  <Plus size={14} /> Create a brief
-                </Button>
-              </div>
-            ) : (
-              <>
-                <select
-                  value={selectedBriefId}
-                  onChange={event => setSelectedBriefId(event.target.value)}
-                  className="mt-6 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm"
-                >
-                  <option value="">Choose a published brief</option>
-                  {briefs
-                    .filter(brief => brief.status === "published")
-                    .map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.title}
-                      </option>
-                    ))}
-                </select>
-                <textarea
-                  rows={4}
-                  value={requestMessage}
-                  onChange={event => setRequestMessage(event.target.value)}
-                  placeholder="Explain why this creator is right for the project (min 10 characters)…"
-                  className="mt-3 w-full rounded-xl border border-[var(--line)] p-3 text-sm outline-none"
-                />
-                {requestMessage.trim().length > 0 && requestMessage.trim().length < 10 && (
-                  <p className="mt-1 text-xs text-red-600">
-                    Message must be at least 10 characters ({requestMessage.trim().length}/10).
-                  </p>
-                )}
-              </>
-            )}
+            <select
+              value={selectedBriefId}
+              onChange={event => setSelectedBriefId(event.target.value)}
+              className="mt-6 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm"
+            >
+              <option value="">Choose a published brief</option>
+              {briefs
+                .filter(brief => brief.status === "published")
+                .map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.title}
+                  </option>
+                ))}
+            </select>
+            <textarea
+              rows={4}
+              value={requestMessage}
+              onChange={event => setRequestMessage(event.target.value)}
+              className="mt-3 w-full rounded-xl border border-[var(--line)] p-3 text-sm outline-none"
+            />
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setRequestOpen(false)}>
                 Cancel
@@ -1660,15 +1705,25 @@ function BriefForm({
   setBriefs,
   existingBrief,
   isLive = false,
+  isBrand = true,
   onSave,
 }: {
   briefs: Brief[];
   setBriefs?: (x: Brief[]) => void;
   existingBrief?: Brief;
   isLive?: boolean;
+  isBrand?: boolean;
   onSave?: (values: Omit<Brief, "id" | "creatorIds">) => Promise<void>;
 }) {
   const [, setLocation] = useLocation();
+  const assistMutation = trpc.briefs.assist.useMutation();
+  const capabilitiesQuery = trpc.briefs.capabilities.useQuery(undefined, {
+    enabled: isLive && isBrand,
+    retry: false,
+  });
+  const [campaignIdea, setCampaignIdea] = useState("");
+  const [aiError, setAiError] = useState("");
+  const [aiSuccess, setAiSuccess] = useState(false);
   const [form, setForm] = useState({
     title: "",
     objective: "",
@@ -1679,13 +1734,73 @@ function BriefForm({
     duration: "30–60 sec",
     ratio: "16:9",
     deliverables: "3",
-    budget: "₹1,50,000–₹4,00,000",
+    budget: "₹2,00,000–₹5,00,000",
     deadline: "",
     location: "Remote",
     mode: "remote",
     licensing: "Commercial use requested; creator retains credit.",
   });
   const [saving, setSaving] = useState(false);
+
+  const handleGenerate = async () => {
+    const trimmed = campaignIdea.trim();
+    if (trimmed.length < 5) {
+      toast.error("Please enter a campaign idea of at least 5 characters");
+      return;
+    }
+    setAiError("");
+    setAiSuccess(false);
+
+    try {
+      let draft: any;
+      if (isLive) {
+        draft = await assistMutation.mutateAsync({ idea: trimmed });
+      } else {
+        draft = {
+          title: trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed,
+          objective: trimmed,
+          contentType: "Brand film",
+          creativeStyle: "Modern & engaging",
+          targetAudience: "Digital audience",
+          platform: "Instagram + site",
+          duration: "30–60 sec",
+          aspectRatio: "16:9",
+          deliverables: 3,
+          budget: "",
+          deadline: "",
+          workMode: "remote" as const,
+          licensing: "",
+          location: "Remote",
+        };
+      }
+
+      setForm(prev => ({
+        ...prev,
+        title: draft.title || prev.title,
+        objective: draft.objective || prev.objective,
+        type: draft.contentType || prev.type,
+        style: draft.creativeStyle || draft.style || prev.style,
+        audience: draft.targetAudience || draft.audience || prev.audience,
+        platform: draft.platform || prev.platform,
+        duration: draft.duration || prev.duration,
+        ratio: draft.aspectRatio || prev.ratio,
+        deliverables: String(draft.deliverables || prev.deliverables),
+        budget: draft.budget !== undefined ? draft.budget : "",
+        deadline: draft.deadline !== undefined ? draft.deadline : "",
+        mode: draft.workMode || prev.mode,
+        licensing: draft.licensing !== undefined ? draft.licensing : "",
+        location: draft.location || prev.location,
+      }));
+      setAiSuccess(true);
+      toast.success("AI draft generated. Review and edit fields before saving.");
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        "Could not generate AI draft. Please check your configuration and try again.";
+      setAiError(msg);
+      toast.error(msg);
+    }
+  };
   useEffect(() => {
     if (!existingBrief) return;
     setForm({
@@ -1717,6 +1832,10 @@ function BriefForm({
       toast.error("Add a title, objective, and deadline first");
       return;
     }
+    if (!form.budget.trim()) {
+      toast.error("Add a budget range first");
+      return;
+    }
     const values: Omit<Brief, "id" | "creatorIds"> = {
       title: form.title,
       objective: form.objective,
@@ -1728,7 +1847,6 @@ function BriefForm({
       ratio: form.ratio,
       deliverables: Number(form.deliverables),
       budget: form.budget,
-      currency: form.budget.includes("$") ? "USD" : "INR",
       deadline: form.deadline,
       location: form.location,
       mode: form.mode as WorkMode,
@@ -1783,6 +1901,84 @@ function BriefForm({
       </h1>
       <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_300px]">
         <section className="surface p-6 lg:p-8">
+          <div className="mb-8 rounded-2xl border border-[var(--line)] bg-[#fafbfe] p-5 md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0B0D12] text-[var(--lime)] text-xs font-bold">
+                  ✦
+                </span>
+                <span className="text-sm font-bold" style={{ color: "#0B0D12" }}>
+                  AI Brief Assistant (Gemini)
+                </span>
+                <span className="rounded-full bg-[#e8ebf2] px-2.5 py-0.5 text-[11px] font-semibold text-[#687087]">
+                  Draft generator
+                </span>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-[#8A8D98] mb-4">
+              Enter a rough campaign idea and let Gemini draft a structured creative brief. All suggestions are editable and must be reviewed before saving.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                data-testid="brief-ai-idea-input"
+                value={campaignIdea}
+                onChange={e => setCampaignIdea(e.target.value)}
+                placeholder="e.g. I need a launch video for my sustainable skincare brand."
+                className="flex-1 rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm text-[#0B0D12] placeholder:text-[#8A8D98] focus:border-[#0B0D12] focus:outline-none"
+                disabled={assistMutation.isPending}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleGenerate();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                data-testid="brief-ai-generate-button"
+                onClick={() => void handleGenerate()}
+                disabled={assistMutation.isPending || campaignIdea.trim().length < 5}
+                className="whitespace-nowrap"
+              >
+                {assistMutation.isPending ? "Generating draft…" : "Draft with AI"}
+              </Button>
+            </div>
+            {isLive && capabilitiesQuery.data && !capabilitiesQuery.data.aiConfigured && (
+              <p className="mt-2 text-xs text-[#8A8D98]">
+                AI assistant is not configured on this server (GEMINI_API_KEY missing). Manual brief creation is available below.
+              </p>
+            )}
+            {aiError && (
+              <div
+                role="alert"
+                data-testid="brief-ai-error"
+                className="mt-3.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
+              >
+                <div className="font-semibold mb-0.5">AI Generation Notice</div>
+                {aiError}
+              </div>
+            )}
+            {aiSuccess && (
+              <div
+                role="status"
+                data-testid="brief-ai-success"
+                className="mt-3.5 rounded-xl border border-[#c8f568]/40 bg-[#f4faec] p-3 text-xs text-[#2b5911] flex items-center justify-between"
+              >
+                <div>
+                  <span className="font-semibold">Draft generated! </span>
+                  Review the populated fields below, adjust any details, and click Save or Publish.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAiSuccess(false)}
+                  className="ml-3 font-semibold text-[#2b5911] hover:underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </div>
           <div className="grid gap-5 md:grid-cols-2">
             <Field
               label="Brief title"
@@ -1845,7 +2041,7 @@ function BriefForm({
               label="Budget range"
               value={form.budget}
               onChange={v => set("budget", v)}
-              placeholder="e.g. ₹1,50,000–₹4,00,000"
+              placeholder="$2k–$5k"
             />
             <Field
               label="Deadline"
@@ -2013,7 +2209,7 @@ function Briefs({ briefs }: { briefs: Brief[] }) {
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Tag>{brief.type}</Tag>
                   <Tag>{brief.platform}</Tag>
-                  <Tag>{formatBudget(brief)}</Tag>
+                  <Tag>{brief.budget}</Tag>
                   <Tag>{brief.deadline}</Tag>
                 </div>
               </div>
@@ -2109,7 +2305,7 @@ function BrandDashboard({
               </div>
               <div>
                 <div className="eyebrow">Budget</div>
-                <p className="mt-2 text-sm font-bold">{formatBudget(briefs[0])}</p>
+                <p className="mt-2 text-sm font-bold">{briefs[0]?.budget}</p>
               </div>
             </div>
           ) : (
@@ -2230,14 +2426,7 @@ function LiveBriefs({
         )}
       </div>
       {loading ? (
-        <div className="mt-10 space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="surface p-5 space-y-3 animate-pulse">
-              <div className="h-5 w-48 rounded bg-[#e8ebf2]" />
-              <div className="h-4 w-96 rounded bg-[#e8ebf2]" />
-            </div>
-          ))}
-        </div>
+        <p className="mt-10 text-sm text-[#687087]">Loading briefs…</p>
       ) : error ? (
         <p role="alert" className="mt-10 text-sm text-red-700">
           Could not load briefs. Refresh to try again.
@@ -2253,11 +2442,6 @@ function LiveBriefs({
               ? "Create a brief to start a collaboration."
               : "Published brand opportunities will appear here."}
           </p>
-          {isBrand && (
-            <Button className="mt-4" onClick={() => setLocation("/briefs/new")}>
-              <Plus size={16} /> New brief
-            </Button>
-          )}
         </div>
       ) : (
         <div className="mt-10 space-y-3">
@@ -2285,13 +2469,8 @@ function LiveBriefs({
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     <Tag>{brief.type}</Tag>
                     <Tag>{brief.platform}</Tag>
-                    <Tag>{formatBudget(brief)}</Tag>
+                    <Tag>{brief.budget}</Tag>
                     <Tag>{brief.deadline}</Tag>
-                    {brief.deliverables ? (
-                      <Tag>{brief.deliverables} deliverables</Tag>
-                    ) : null}
-                    {brief.ratio ? <Tag>{brief.ratio}</Tag> : null}
-                    {brief.duration ? <Tag>{brief.duration}</Tag> : null}
                   </div>
                 </div>
               </div>
@@ -2358,9 +2537,6 @@ function SavedCreators({
           <p className="mt-2 text-sm text-[#687087]">
             Save published creators from discovery to keep them here.
           </p>
-          <Button className="mt-4" onClick={() => setLocation("/discover")}>
-            Browse creator index
-          </Button>
         </div>
       ) : (
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -2372,11 +2548,6 @@ function SavedCreators({
                 <p className="mt-1 text-sm text-[#687087]">
                   {creator.headline}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <Tag>{creator.location}</Tag>
-                  <Tag>{creator.mode}</Tag>
-                  <Tag>{creator.availability}</Tag>
-                </div>
                 <div className="mt-4 flex gap-2">
                   <Button
                     variant="ghost"
@@ -2409,7 +2580,6 @@ function DemoSavedCreators({
   savedIds: string[];
   onSave: (id: string) => void;
 }) {
-  const [, setLocation] = useLocation();
   const saved = creators.filter(creator => savedIds.includes(creator.id));
   return (
     <div className="mx-auto max-w-[1200px] px-5 py-10 lg:px-10">
@@ -2435,9 +2605,6 @@ function DemoSavedCreators({
           <p className="mt-2 text-sm text-[#687087]">
             Saved sample creators stay in this browser only.
           </p>
-          <Button className="mt-4" onClick={() => setLocation("/discover")}>
-            Browse creator index
-          </Button>
         </div>
       )}
     </div>
@@ -2477,17 +2644,11 @@ function LiveRequests({
         <i>in motion.</i>
       </h1>
       {loading ? (
-        <div className="surface mt-10 p-6 space-y-4 animate-pulse">
-          <div className="h-6 w-1/3 rounded bg-[#e8ebf2]" />
-          <div className="h-4 w-2/3 rounded bg-[#e8ebf2]" />
-          <div className="h-4 w-1/2 rounded bg-[#e8ebf2]" />
-        </div>
+        <p className="mt-10 text-sm text-[#687087]">Loading requests…</p>
       ) : error ? (
-        <div className="surface mt-10 p-8 text-center">
-          <p role="alert" className="text-sm text-red-700">
-            Could not load collaboration requests. Refresh to try again.
-          </p>
-        </div>
+        <p role="alert" className="mt-10 text-sm text-red-700">
+          Could not load collaboration requests.
+        </p>
       ) : requests.length === 0 ? (
         <div className="surface mt-10 p-8 text-center">
           <HeartHandshake size={26} className="mx-auto text-[#8991a2]" />
@@ -2750,7 +2911,7 @@ export default function Home() {
       duration: values.duration || "Not specified",
       aspectRatio: values.ratio || "16:9",
       deliverables: values.deliverables || 1,
-      budget: values.budget,
+      budget: values.budget?.trim() || "To be discussed",
       deadline: values.deadline,
       location: values.location || "Remote",
       workMode: values.mode || "remote",
@@ -2811,46 +2972,16 @@ export default function Home() {
   let content: React.ReactNode;
   if (path === "/discover" && isLive)
     content = creatorQuery.isLoading ? (
-      <div className="mx-auto max-w-[1440px] px-5 py-10 lg:px-10">
-        <div className="space-y-3">
-          <div className="h-3 w-32 rounded bg-[#e8ebf2] animate-pulse" />
-          <div className="h-10 w-80 rounded-xl bg-[#e8ebf2] animate-pulse" />
-          <div className="h-4 w-96 rounded bg-[#e8ebf2] animate-pulse" />
-        </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-            <div key={i} className="surface overflow-hidden p-4 space-y-4 animate-pulse">
-              <div className="aspect-[4/3] w-full rounded-xl bg-[#e8ebf2]" />
-              <div className="space-y-2">
-                <div className="h-4 w-3/4 rounded bg-[#e8ebf2]" />
-                <div className="h-3 w-1/2 rounded bg-[#e8ebf2]" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <p className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]">
+        Loading creators…
+      </p>
     ) : creatorQuery.error ? (
-      <div
-        className="mx-auto max-w-[1440px] px-5 py-16 text-center lg:px-10"
+      <p
         role="alert"
-        data-testid="discover-error"
+        className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-red-700"
       >
-        <div className="surface mx-auto max-w-md p-8">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#f0f2f7]">
-            <X size={22} className="text-[#8A8D98]" />
-          </div>
-          <h2 className="mt-4 text-lg font-bold" style={{ color: "#0B0D12" }}>
-            Could not load creators
-          </h2>
-          <p className="mt-2 text-sm" style={{ color: "#8A8D98" }}>
-            There was an issue fetching the creator directory. Check your
-            connection and try again.
-          </p>
-          <Button className="mt-5" onClick={() => creatorQuery.refetch()}>
-            Retry
-          </Button>
-        </div>
-      </div>
+        Could not load creators. Refresh to try again.
+      </p>
     ) : (
       <Discover
         creators={activeCreators}
@@ -3079,6 +3210,7 @@ export default function Home() {
           setBriefs={persistBriefs}
           existingBrief={briefForEdit}
           isLive={isLive}
+          isBrand={isBrand}
           onSave={values =>
             saveLiveBrief(
               values,
@@ -3196,7 +3328,7 @@ export default function Home() {
           {auth.user && (
             <div className="mx-auto max-w-[1440px] px-5 pt-4 text-xs text-[#8991a2] lg:px-10">
               Signed in as {auth.user.name || auth.user.email || "GoCollabo user"}.{" "}
-              <span className="font-bold text-[#0B0D12] bg-[#C8F568] px-2 py-0.5 rounded-full text-[11px]">Live account</span>
+              <span className="font-bold text-[var(--indigo)]">Live account</span>
             </div>
           )}
           {auth.loading ? (
