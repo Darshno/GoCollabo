@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { FilterDropdown } from "@/components/FilterDropdown";
+import { formatRate, formatBudget, type CurrencyCode } from "@shared/rates";
 
 const PortfolioStudio = lazy(() => import("@/pages/PortfolioStudio"));
 
@@ -53,6 +54,7 @@ type Creator = {
   styles: string[];
   experience: string;
   rates: string;
+  currency?: CurrencyCode | string;
   formats: string[];
   availability: string;
   verification: string;
@@ -82,6 +84,7 @@ type Brief = {
   style: string;
   platform: string;
   budget: string;
+  currency?: CurrencyCode | string;
   deadline: string;
   status: "draft" | "published" | "closed";
   audience?: string;
@@ -108,6 +111,7 @@ type PersistedCreator = {
     styles: string;
     experience: string;
     rates: string | null;
+    currency?: string | null;
     formats: string;
     workflow: string;
     verificationStatus: string;
@@ -142,6 +146,7 @@ type PersistedBrief = {
   aspectRatio: string;
   deliverables: number;
   budget: string;
+  currency?: string | null;
   deadline: string;
   location: string;
   workMode: WorkMode;
@@ -164,6 +169,7 @@ function mapCreator(record: PersistedCreator): Creator {
     styles: split(profile.styles),
     experience: profile.experience,
     rates: profile.rates || "Range not shared",
+    currency: (profile as { currency?: string | null }).currency || undefined,
     formats: split(profile.formats),
     availability: profile.availability,
     verification: profile.verificationStatus.toUpperCase(),
@@ -196,6 +202,7 @@ function mapBrief(brief: PersistedBrief): Brief {
     style: brief.style,
     platform: brief.platform,
     budget: brief.budget,
+    currency: (brief as { currency?: string | null }).currency || undefined,
     deadline: brief.deadline,
     status: brief.status,
     audience: brief.audience,
@@ -212,21 +219,23 @@ function mapBrief(brief: PersistedBrief): Brief {
 const seedCreators: Creator[] = [
   {
     id: "c1",
-    slug: "mara-chen",
-    name: "Mara Chen",
-    headline: "Director + visual systems designer for impossible worlds",
-    location: "Los Angeles, CA",
+    slug: "ananya-sharma",
+    name: "Ananya Sharma",
+    headline:
+      "AI filmmaker · Cinematic worlds, atmospheric storytelling, and experimental visuals",
+    location: "Mumbai, India",
     mode: "remote",
-    skills: ["Direction", "Worldbuilding", "Compositing"],
+    skills: ["AI filmmaking", "Direction", "Worldbuilding"],
     tools: ["Runway", "ComfyUI", "After Effects"],
-    types: ["Film", "Brand film", "Editorial"],
-    styles: ["Surreal", "Cinematic", "Textural"],
+    types: ["AI short film", "Film", "Editorial"],
+    styles: ["Cinematic", "Surreal", "Textural"],
     experience: "6–8 years",
-    rates: "$2.5k–$8k / project",
+    rates: "₹15,000–₹45,000 / project",
+    currency: "INR",
     formats: ["16:9", "9:16", "1:1"],
-    availability: "Available in November",
+    availability: "Available now",
     verification: "SELF-REPORTED",
-    bio: "Mara builds cinematic worlds that feel discovered rather than designed. Her work moves between atmospheric short films, launch films, and visual identity systems for teams working at the edge of culture.",
+    bio: "Ananya is an AI filmmaker exploring cinematic storytelling, visual atmosphere, and experimental AI-generated worlds. Her work focuses on cinematic worlds, atmospheric storytelling, and experimental visuals.",
     workflow:
       "A tight concept loop, visual reference pass, then rapid look development before production. Every delivery includes organized source files and a usage note.",
     projects: [
@@ -235,11 +244,12 @@ const seedCreators: Creator[] = [
         type: "AI short film",
         image:
           "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200&q=85",
-        description: "A speculative film about memory, rendered as weather.",
+        description:
+          "A speculative film exploring memory and atmospheric landscapes.",
       },
       {
         title: "Solace / 03",
-        type: "Brand world",
+        type: "Atmospheric world",
         image:
           "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200&q=85",
         description: "Atmospheric launch system for a new ritual object.",
@@ -247,30 +257,33 @@ const seedCreators: Creator[] = [
       },
       {
         title: "Soft Geometry",
-        type: "Editorial motion",
+        type: "Experimental motion",
         image:
           "https://images.unsplash.com/photo-1500534623283-312aade485b7?w=1200&q=85",
-        description: "A moving study in light, skin, and architectural rhythm.",
+        description:
+          "A moving study in light, skin, and architectural rhythm.",
       },
     ],
   },
   {
     id: "c2",
-    slug: "noah-williams",
-    name: "Noah Williams",
-    headline: "AI animator making joyful, precise brand motion",
-    location: "London, UK",
+    slug: "arjun-mehta",
+    name: "Arjun Mehta",
+    headline:
+      "AI motion designer · Bold motion systems and playful visual identities for emerging brands",
+    location: "Bengaluru, India",
     mode: "hybrid",
-    skills: ["3D animation", "Motion design", "Character"],
+    skills: ["AI motion design", "3D animation", "Visual identity"],
     tools: ["Blender", "Sora", "Cinema 4D"],
-    types: ["Social", "Product film", "Explainer"],
+    types: ["Product story", "Social", "Explainer"],
     styles: ["Playful", "Graphic", "Warm"],
     experience: "4–6 years",
-    rates: "$1.8k–$5k / project",
+    rates: "₹12,000–₹35,000 / project",
+    currency: "INR",
     formats: ["9:16", "1:1", "4:5"],
     availability: "Open for one project",
     verification: "SELF-REPORTED",
-    bio: "Noah combines classic motion discipline with generative play. He is especially good at translating a fuzzy product truth into a visual system that can scale across a campaign.",
+    bio: "Arjun is an AI motion designer developing expressive visual systems and motion-led product storytelling. He builds bold motion systems and playful visual identities for emerging brands.",
     workflow:
       "Storyboard in frames, prototype movement early, then build a small reusable motion language so every cut feels related.",
     projects: [
@@ -279,14 +292,16 @@ const seedCreators: Creator[] = [
         type: "Product story",
         image:
           "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&q=85",
-        description: "A playful product film for a world that is already here.",
+        description:
+          "A playful product story for emerging brands and modern tools.",
       },
       {
         title: "Melt / Move",
         type: "Motion identity",
         image:
           "https://images.unsplash.com/photo-1518640467707-6811f4a6ab73?w=1200&q=85",
-        description: "A warm, elastic visual language for a culture platform.",
+        description:
+          "A warm, elastic visual language for a culture platform.",
         concept: true,
       },
       {
@@ -300,21 +315,23 @@ const seedCreators: Creator[] = [
   },
   {
     id: "c3",
-    slug: "aisha-kim",
-    name: "Aisha Kim",
-    headline: "Generative artist for fashion, music, and future-facing culture",
-    location: "Seoul, KR",
+    slug: "meera-nair",
+    name: "Meera Nair",
+    headline:
+      "Generative artist · Contemporary Indian aesthetics, experimental textures, and future-facing fashion",
+    location: "Kochi, India",
     mode: "remote",
-    skills: ["Image making", "Art direction", "Styleframes"],
+    skills: ["Generative art", "Art direction", "Fashion imagery"],
     tools: ["Midjourney", "Krea", "Photoshop"],
-    types: ["Campaign", "Cover art", "Social"],
-    styles: ["Editorial", "Chromatic", "Human"],
+    types: ["Fashion campaign", "Campaign", "Editorial"],
+    styles: ["Editorial", "Chromatic", "Textural"],
     experience: "3–5 years",
-    rates: "$900–$3k / project",
+    rates: "₹20,000–₹60,000 / project",
+    currency: "INR",
     formats: ["4:5", "1:1", "16:9"],
-    availability: "Available now",
+    availability: "Available in November",
     verification: "SELF-REPORTED",
-    bio: "Aisha makes images that hold attention at thumb speed. Her practice is rooted in fashion image-making but expands into tactile worlds, campaign systems, and album environments.",
+    bio: "Meera is a generative artist exploring fashion imagery, material experimentation, and contemporary visual culture. Her work brings together contemporary Indian aesthetics, experimental textures, and future-facing fashion.",
     workflow:
       "Start with a visual tension, collect a precise reference wall, then create a small set of hero frames before expanding into a family of assets.",
     projects: [
@@ -324,14 +341,15 @@ const seedCreators: Creator[] = [
         image:
           "https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=1200&q=85",
         description:
-          "Chromatic portraiture for a collection built around threshold states.",
+          "Chromatic portraiture for a collection exploring tactile textures and modern forms.",
       },
       {
         title: "Nite Bloom",
         type: "Cover world",
         image:
           "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200&q=85",
-        description: "A nocturnal visual system for an electronic record.",
+        description:
+          "A nocturnal visual system combining botanical textures with digital craft.",
         concept: true,
       },
       {
@@ -345,21 +363,23 @@ const seedCreators: Creator[] = [
   },
   {
     id: "c4",
-    slug: "leo-martins",
-    name: "Leo Martins",
-    headline: "Experimental filmmaker blending documentary texture with AI",
-    location: "São Paulo, BR",
+    slug: "kabir-malhotra",
+    name: "Kabir Malhotra",
+    headline:
+      "Experimental filmmaker · Documentary-inspired visuals blending Indian urban culture with AI filmmaking",
+    location: "New Delhi, India",
     mode: "remote",
-    skills: ["Editing", "Documentary", "Sound"],
+    skills: ["Experimental filmmaking", "Documentary", "Editing"],
     tools: ["DaVinci Resolve", "Runway", "ElevenLabs"],
-    types: ["Film", "Music video", "Documentary"],
-    styles: ["Raw", "Human", "Noir"],
+    types: ["Short film", "Film", "Documentary"],
+    styles: ["Raw", "Human", "Cinematic"],
     experience: "8–10 years",
-    rates: "$3k–$12k / project",
+    rates: "₹18,000–₹50,000 / project",
+    currency: "INR",
     formats: ["16:9", "2.39:1", "9:16"],
     availability: "Waitlist only",
     verification: "NOT VERIFIED",
-    bio: "Leo works with the friction between a real voice and an impossible image. He brings documentary instincts to synthetic production, keeping emotion before spectacle.",
+    bio: "Kabir is an experimental filmmaker combining documentary-inspired observation with contemporary AI filmmaking. His projects feature documentary-inspired visuals blending Indian urban culture with AI filmmaking.",
     workflow:
       "Find the real human beat first. Build references around it, then use generative tools only where they give the story a new pressure or texture.",
     projects: [
@@ -368,7 +388,8 @@ const seedCreators: Creator[] = [
         type: "Short film",
         image:
           "https://images.unsplash.com/photo-1519999482648-25049ddd37b1?w=1200&q=85",
-        description: "A nocturne about the people who keep the lights on.",
+        description:
+          "A documentary-inspired nocturne observing city light and urban rhythms.",
       },
       {
         title: "Pulses",
@@ -383,7 +404,8 @@ const seedCreators: Creator[] = [
         type: "Documentary study",
         image:
           "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=85",
-        description: "Fragments from a city learning a new language.",
+        description:
+          "Observational fragments exploring modern Indian cities and streetscapes.",
       },
     ],
   },
@@ -397,7 +419,8 @@ const seedBriefs: Brief[] = [
     type: "Brand film",
     style: "Human, tactile, optimistic",
     platform: "Paid social + site",
-    budget: "$5k–$10k",
+    budget: "₹4,00,000–₹8,00,000",
+    currency: "INR",
     deadline: "Nov 18, 2026",
     status: "published",
     creatorIds: [],
@@ -409,7 +432,8 @@ const seedBriefs: Brief[] = [
     type: "Campaign",
     style: "Editorial, warm, considered",
     platform: "Instagram + OOH",
-    budget: "$2k–$5k",
+    budget: "₹1,50,000–₹4,00,000",
+    currency: "INR",
     deadline: "Dec 02, 2026",
     status: "draft",
     creatorIds: [],
@@ -1029,7 +1053,7 @@ function CreatorWorkspace({
       key: "rates",
       label: "Want to share a typical range?",
       hint: "Optional — visibility is your choice",
-      placeholder: "e.g. $2k–$5k / project",
+      placeholder: "e.g. ₹15,000–₹45,000 / project",
     },
     {
       key: "workflow",
@@ -1058,6 +1082,7 @@ function CreatorWorkspace({
       styles: split(answers.styles || "Original"),
       experience: answers.experience || "Experience shared on request",
       rates: answers.rates || "Range not shared",
+      currency: answers.rates?.includes("$") ? "USD" : "INR",
       formats: split(answers.formats || "16:9"),
       availability: "Available for conversations",
       verification: "SELF-REPORTED",
@@ -1474,7 +1499,7 @@ function Profile({
                 </div>
                 <div>
                   <div className="eyebrow mb-1">Rates</div>
-                  <div className="font-bold">{creator.rates}</div>
+                  <div className="font-bold">{formatRate(creator)}</div>
                 </div>
                 <div>
                   <div className="eyebrow mb-1">Formats</div>
@@ -1606,7 +1631,7 @@ function BriefForm({
     duration: "30–60 sec",
     ratio: "16:9",
     deliverables: "3",
-    budget: "$2k–$5k",
+    budget: "₹1,50,000–₹4,00,000",
     deadline: "",
     location: "Remote",
     mode: "remote",
@@ -1655,6 +1680,7 @@ function BriefForm({
       ratio: form.ratio,
       deliverables: Number(form.deliverables),
       budget: form.budget,
+      currency: form.budget.includes("$") ? "USD" : "INR",
       deadline: form.deadline,
       location: form.location,
       mode: form.mode as WorkMode,
@@ -1771,7 +1797,7 @@ function BriefForm({
               label="Budget range"
               value={form.budget}
               onChange={v => set("budget", v)}
-              placeholder="$2k–$5k"
+              placeholder="e.g. ₹1,50,000–₹4,00,000"
             />
             <Field
               label="Deadline"
@@ -1939,7 +1965,7 @@ function Briefs({ briefs }: { briefs: Brief[] }) {
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Tag>{brief.type}</Tag>
                   <Tag>{brief.platform}</Tag>
-                  <Tag>{brief.budget}</Tag>
+                  <Tag>{formatBudget(brief)}</Tag>
                   <Tag>{brief.deadline}</Tag>
                 </div>
               </div>
@@ -2035,7 +2061,7 @@ function BrandDashboard({
               </div>
               <div>
                 <div className="eyebrow">Budget</div>
-                <p className="mt-2 text-sm font-bold">{briefs[0]?.budget}</p>
+                <p className="mt-2 text-sm font-bold">{formatBudget(briefs[0])}</p>
               </div>
             </div>
           ) : (
@@ -2199,7 +2225,7 @@ function LiveBriefs({
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     <Tag>{brief.type}</Tag>
                     <Tag>{brief.platform}</Tag>
-                    <Tag>{brief.budget}</Tag>
+                    <Tag>{formatBudget(brief)}</Tag>
                     <Tag>{brief.deadline}</Tag>
                   </div>
                 </div>
