@@ -9,6 +9,7 @@ import {
   showsWorkspaceChrome,
   useRouteChangeEffects,
 } from "@/components/Navigation";
+import { LandingPage } from "@/components/LandingPage";
 import { trpc } from "@/lib/trpc";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -2946,6 +2947,29 @@ export default function Home() {
         }}
       />
     );
+  if (path === "/") {
+    useRouteChangeEffects(path);
+    return (
+      <div className="landing-root bg-[#F8F7F2] min-h-screen">
+        <SkipLink />
+        <main id="main-content" tabIndex={-1} className="outline-none">
+          <LandingPage
+            onLogin={() => setAuthDialogOpen(true)}
+            onSelectRole={role => {
+              setDemoRole(role);
+              localStorage.setItem(
+                key,
+                JSON.stringify({ role, creators, briefs, savedIds: demoSavedIds })
+              );
+              if (isLive) accountTypeMutation.mutate({ accountType: role });
+            }}
+          />
+        </main>
+        <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} />
+      </div>
+    );
+  }
+
   const navRole = isBrand ? "brand" : "creator";
   const chrome = showsWorkspaceChrome(path);
   useRouteChangeEffects(path);
