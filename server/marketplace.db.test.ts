@@ -1,374 +1,246 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const state = vi.hoisted(() => ({
-  selectResults: [] as unknown[][],
-  events: [] as string[],
-  wherePredicates: [] as unknown[],
-  insertError: undefined as Error | undefined,
-  deleteAffectedRows: 1,
-}));
-
-const dbMock = {
-  select: () => {
-    state.events.push("select");
-    const query: Record<string, (...args: any[]) => any> = {};
-    query.from = () => query;
-    query.where = condition => {
-      state.events.push("where");
-      state.wherePredicates.push(condition);
-      return query;
-    };
-    query.innerJoin = () => query;
-    query.limit = async () => state.selectResults.shift() || [];
-    query.orderBy = () => query;
-    query.then = (
-      resolve: (value: unknown[]) => unknown,
-      reject: (reason: unknown) => unknown
-    ) =>
-      Promise.resolve(state.selectResults.shift() || []).then(resolve, reject);
-    return query;
-  },
-  insert: (_table: unknown) => ({
-    values: (values: unknown) => {
-      state.events.push(`insert:${JSON.stringify(values)}`);
-      if (state.insertError) return Promise.reject(state.insertError);
-      const result = Promise.resolve([{ insertId: 42 }]) as Promise<
-        { insertId: number }[]
-      > & {
-        onDuplicateKeyUpdate?: (
-          input: unknown
-        ) => Promise<{ insertId: number }[]>;
-      };
-      result.onDuplicateKeyUpdate = () => result;
-      return result;
-    },
-  }),
-  update: (_table: unknown) => ({
-    set: (values: unknown) => ({
-      where: () => {
-        state.events.push(`update:${JSON.stringify(values)}`);
-        return Promise.resolve([{ affectedRows: 1 }]);
-      },
-    }),
-  }),
-  delete: (_table: unknown) => ({
-    where: () => {
-      state.events.push("delete");
-      return Promise.resolve([{ affectedRows: state.deleteAffectedRows }]);
-    },
-  }),
-  transaction: (callback: (tx: any) => Promise<unknown>) => callback(dbMock),
-};
-
-vi.mock("drizzle-orm/mysql2", () => ({ drizzle: () => dbMock }));
-
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RequestSupabase } from "./supabase";
 import {
-  getCreatorById,
   createPortfolioProject,
-  isValidBriefStatusTransition,
-  createBrief,
-  canCreateCollaboration,
-  saveCreator,
-  saveCreatorProfile,
-  deletePortfolioProject,
+  getCreatorById,
+  getCreatorProfileForUser,
+  listBriefsForBrand,
   listPortfolioProjects,
   reorderPortfolioProjects,
-  updatePortfolioProject,
-  updateCollaborationStatus,
+  saveCreator,
+  saveCreatorProfile,
   updateBriefForBrand,
+  updatePortfolioProject,
 } from "./db";
 
-const profile = {
-  id: 17,
-  userId: 7,
-  slug: "framefoundry-7",
-  name: "Frame Foundry",
-  headline: "An independent creator",
-  bio: "A creator profile with enough detail to be useful.",
+const state = vi.hoisted(() => ({
+  tables: {} as Record<string, Record<string, unknown>[]>,
+  operations: [] as Array<{ table: string; action: string; payload?: unknown; filters: unknown[] }>,
+  nextId: 1000,
+  duplicateSavedCreator: false,
+}));
+
+function fakeSupabase() {
+  return {
+    from(table: string) {
+      let action = "select";
+      let payload: unknown;
+      const filters: Array<[string, unknown, string]> = [];
+      const operation = () => {
+        const rows = state.tables[table] || (state.tables[table] = []);
+        const matches = (row: Record<string, unknown>) => filters.every(([key, value, type]) => {
+          if (type === "in") return (value as unknown[]).includes(row[key]);
+          return row[key] === value;
+        });
+        state.operations.push({ table, action, payload, filters });
+        if (action === "insert") {
+          const values = Array.isArray(payload) ? payload : [payload];
+          if (table === "saved_creators" && state.duplicateSavedCreator)
+            return { data: null, error: { code: "23505", message: "duplicate" } };
+          const inserted = values.map(value => {
+            const row = { id: state.nextId++, ...(value as object) };
+            rows.push(row);
+            return row;
+          });
+          return { data: inserted, error: null };
+        }
+        if (action === "upsert") {
+          const values = Array.isArray(payload) ? payload : [payload];
+          const inserted = values.map(value => {
+            const input = value as Record<string, unknown>;
+            const key = table === "creator_profiles" ? "user_id" : "id";
+            const existing = rows.find(row => row[key] === input[key]);
+            if (existing) Object.assign(existing, input);
+            else rows.push({ id: state.nextId++, ...input });
+            return existing || rows[rows.length - 1];
+          });
+          return { data: inserted, error: null };
+        }
+        if (action === "update") {
+          const selected = rows.filter(matches);
+          for (const row of selected) Object.assign(row, payload);
+          return { data: selected, error: null };
+        }
+        if (action === "delete") {
+          const deleted = rows.filter(matches);
+          state.tables[table] = rows.filter(row => !matches(row));
+          return { data: deleted, error: null };
+        }
+        return { data: rows.filter(matches), error: null };
+      };
+      const query: any = {
+        select: () => query,
+        eq: (key: string, value: unknown) => { filters.push([key, value, "eq"]); return query; },
+        in: (key: string, value: unknown[]) => { filters.push([key, value, "in"]); return query; },
+        order: () => query,
+        limit: () => query,
+        insert: (value: unknown) => { action = "insert"; payload = value; return query; },
+        upsert: (value: unknown) => { action = "upsert"; payload = value; return query; },
+        update: (value: unknown) => { action = "update"; payload = value; return query; },
+        delete: () => { action = "delete"; return query; },
+        single: async () => { const response = operation(); return { ...response, data: Array.isArray(response.data) ? response.data[0] || null : response.data }; },
+        maybeSingle: async () => { const response = operation(); return { ...response, data: Array.isArray(response.data) ? response.data[0] || null : response.data }; },
+        then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(operation()).then(resolve, reject),
+      };
+      return query;
+    },
+    storage: { from: () => ({ createSignedUrl: async (path: string) => ({ data: { signedUrl: `signed:${path}` }, error: null }) }) },
+    rpc: async (_name: string, _args: unknown) => ({ data: true, error: null }),
+  };
+}
+
+const creatorProfile = {
+  id: 12,
+  user_id: "10000000-0000-4000-8000-000000000001",
+  slug: "creator-one",
+  name: "Creator One",
+  headline: "Independent creator",
+  bio: "A sufficiently detailed creator bio.",
   location: "Remote",
-  workMode: "remote" as const,
+  work_mode: "remote",
   skills: "Direction",
-  tools: "Runway",
-  contentTypes: "Film",
-  styles: "Cinematic",
+  tools: "Blender",
+  content_types: "Film",
+  styles: "Editorial",
   experience: "4 years",
   rates: null,
   formats: "16:9",
-  workflow: "Plan, prototype, deliver.",
-  verificationStatus: "self-reported" as const,
-  availability: "available" as const,
-  published: 0,
+  workflow: "Plan, make, deliver",
+  verification_status: "self-reported",
+  availability: "available",
+  published: true,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
 };
 
-function sqlText(value: unknown): string {
-  if (!value || typeof value !== "object") return "";
-  const sql = value as {
-    queryChunks?: unknown[];
-    value?: unknown[];
-    name?: string;
-  };
-  if (Array.isArray(sql.queryChunks))
-    return sql.queryChunks.map(sqlText).join(" ");
-  if (Array.isArray(sql.value)) return sql.value.map(String).join(" ");
-  return sql.name || "";
-}
-
-beforeEach(() => {
-  state.selectResults.length = 0;
-  state.events.length = 0;
-  state.wherePredicates.length = 0;
-  state.insertError = undefined;
-  state.deleteAffectedRows = 1;
-  vi.stubEnv("DATABASE_URL", "mysql://unit:unit@127.0.0.1:3306/framefoundry");
+const project = (id: number, published: boolean) => ({
+  id,
+  creator_id: 12,
+  title: `Project ${id}`,
+  description: "Creator-provided work",
+  content_type: "Campaign",
+  tools: "Runway",
+  skills: "Art direction",
+  role: "Director",
+  challenge: "A stated challenge",
+  approach: "A stated approach",
+  outcomes: "",
+  impact_summary: "",
+  media_path: null,
+  media_name: null,
+  media_type: null,
+  media_size: null,
+  is_concept: false,
+  published,
+  sort_order: id,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
 });
 
-describe("marketplace database helpers", () => {
-  it("updates the existing creator profile for its owner without inserting a duplicate", async () => {
-    state.selectResults.push([{ id: profile.id }], [profile], []);
+beforeEach(() => {
+  state.tables = {};
+  state.operations = [];
+  state.nextId = 1000;
+  state.duplicateSavedCreator = false;
+});
 
-    const result = await saveCreatorProfile(7, {
-      slug: "framefoundry",
-      name: profile.name,
-      headline: profile.headline,
-      bio: profile.bio,
-      location: profile.location,
-      workMode: profile.workMode,
-      skills: profile.skills,
-      tools: profile.tools,
-      contentTypes: profile.contentTypes,
-      styles: profile.styles,
-      experience: profile.experience,
-      rates: undefined,
-      formats: profile.formats,
-      workflow: profile.workflow,
-      published: 0,
+describe("Supabase marketplace data access", () => {
+  it("filters unpublished creators and portfolio projects from public profiles", async () => {
+    state.tables.creator_profiles = [{ ...creatorProfile }];
+    state.tables.portfolio_projects = [project(101, true), project(102, false)];
+    const result = await getCreatorById(fakeSupabase() as unknown as RequestSupabase, 12);
+
+    expect(result?.projects.map(item => item.id)).toEqual([101]);
+    const profileQuery = state.operations.find(operation => operation.table === "creator_profiles");
+    expect(profileQuery?.filters).toContainEqual(["published", true, "eq"]);
+    const projectQuery = state.operations.find(operation => operation.table === "portfolio_projects");
+    expect(projectQuery?.filters).toContainEqual(["published", true, "eq"]);
+  });
+
+  it("returns no public profile when the creator profile is private", async () => {
+    state.tables.creator_profiles = [{ ...creatorProfile, published: false }];
+    state.tables.portfolio_projects = [project(101, true)];
+    await expect(getCreatorById(fakeSupabase() as unknown as RequestSupabase, 12)).resolves.toBeUndefined();
+    expect(state.operations.filter(operation => operation.table === "portfolio_projects")).toHaveLength(0);
+  });
+
+  it("loads all private and public projects only for the supplied owner profile", async () => {
+    state.tables.portfolio_projects = [project(101, true), project(102, false), { ...project(103, true), creator_id: 99 }];
+    const result = await listPortfolioProjects(fakeSupabase() as unknown as RequestSupabase, 12);
+    expect(result).toHaveLength(2);
+    expect(state.operations[0]?.filters).toContainEqual(["creator_id", 12, "eq"]);
+  });
+
+  it("upserts a creator profile using the authenticated Supabase user UUID", async () => {
+    state.tables.creator_profiles = [];
+    const client = fakeSupabase() as unknown as RequestSupabase;
+    await saveCreatorProfile(client, creatorProfile.user_id, {
+      slug: creatorProfile.slug,
+      name: creatorProfile.name,
+      headline: creatorProfile.headline,
+      bio: creatorProfile.bio,
+      location: creatorProfile.location,
+      workMode: "remote",
+      skills: creatorProfile.skills,
+      tools: creatorProfile.tools,
+      contentTypes: creatorProfile.content_types,
+      styles: creatorProfile.styles,
+      experience: creatorProfile.experience,
+      rates: null,
+      formats: creatorProfile.formats,
+      workflow: creatorProfile.workflow,
+      published: true,
     });
-
-    expect(result?.profile.id).toBe(profile.id);
-    expect(state.events.some(event => event.startsWith("update:"))).toBe(true);
-    expect(state.events.some(event => event.startsWith("insert:"))).toBe(false);
-    expect(
-      state.events.some(event => event.includes('"slug":"framefoundry-7"'))
-    ).toBe(true);
+    expect(state.tables.creator_profiles[0]?.user_id).toBe(creatorProfile.user_id);
+    expect(state.operations.some(operation => operation.action === "upsert")).toBe(true);
   });
 
-  it("inserts and reloads a new creator profile for the signed-in owner", async () => {
-    state.selectResults.push([], [profile], []);
-
-    const result = await saveCreatorProfile(7, {
-      slug: "framefoundry",
-      name: profile.name,
-      headline: profile.headline,
-      bio: profile.bio,
-      location: profile.location,
-      workMode: profile.workMode,
-      skills: profile.skills,
-      tools: profile.tools,
-      contentTypes: profile.contentTypes,
-      styles: profile.styles,
-      experience: profile.experience,
-      rates: undefined,
-      formats: profile.formats,
-      workflow: profile.workflow,
-      published: 1,
+  it("creates private projects and constrains project edits by both ID and owner", async () => {
+    state.tables.portfolio_projects = [];
+    const client = fakeSupabase() as unknown as RequestSupabase;
+    const created = await createPortfolioProject(client, 12, {
+      title: "New project",
+      description: "Source project details.",
+      content_type: "Campaign",
+      tools: "",
+      skills: "",
+      role: "",
+      challenge: "",
+      approach: "",
+      outcomes: "",
+      impact_summary: "",
+      media_path: null,
+      media_name: null,
+      media_type: null,
+      media_size: null,
+      is_concept: false,
     });
+    expect(created.published).toBe(false);
+    expect(created.creatorId).toBe(12);
 
-    expect(result?.profile.published).toBe(0);
-    expect(state.events.some(event => event.startsWith("insert:"))).toBe(true);
-    expect(state.events.some(event => event.startsWith("update:"))).toBe(false);
+    state.tables.portfolio_projects.push({ ...project(500, false), creator_id: 99 });
+    const updated = await updatePortfolioProject(client, 12, 500, { title: "Not mine" });
+    expect(updated).toBeUndefined();
+    expect(state.tables.portfolio_projects.find(row => row.id === 500)?.title).toBe("Project 500");
   });
 
-  it("does not overwrite another creator when a profile slug collides", async () => {
-    state.selectResults.push([], []);
-    state.insertError = new Error("Duplicate slug");
-
-    await expect(
-      saveCreatorProfile(7, {
-        slug: "framefoundry",
-        name: profile.name,
-        headline: profile.headline,
-        bio: profile.bio,
-        location: profile.location,
-        workMode: profile.workMode,
-        skills: profile.skills,
-        tools: profile.tools,
-        contentTypes: profile.contentTypes,
-        styles: profile.styles,
-        experience: profile.experience,
-        rates: undefined,
-        formats: profile.formats,
-        workflow: profile.workflow,
-        published: 1,
-      })
-    ).rejects.toThrow("Duplicate slug");
-    expect(state.events.some(event => event.startsWith("update:"))).toBe(false);
+  it("scopes brief reads to the caller's brand and routes ordering through the RLS RPC", async () => {
+    state.tables.briefs = [
+      { id: 1, brand_id: "brand-a", title: "A" },
+      { id: 2, brand_id: "brand-b", title: "B" },
+    ];
+    const client = fakeSupabase() as unknown as RequestSupabase;
+    const rows = await listBriefsForBrand(client, "brand-a");
+    expect(rows.map(row => row.id)).toEqual([1]);
+    await expect(reorderPortfolioProjects(client, 12, [101])).resolves.toBe(true);
   });
 
-  it("does not load portfolio projects for a public unpublished profile", async () => {
-    state.selectResults.push([]);
-
-    await expect(getCreatorById(profile.id)).resolves.toBeUndefined();
-    expect(state.events).toEqual(["select", "where"]);
-    expect(state.selectResults).toHaveLength(0);
-  });
-
-  it("returns only published projects from a public creator profile", async () => {
-    const publishedProject = {
-      id: 62,
-      creatorId: profile.id,
-      title: "Published project",
-      published: 1,
-    };
-    state.selectResults.push(
-      [{ ...profile, published: 1 }],
-      [publishedProject]
-    );
-
-    await expect(getCreatorById(profile.id)).resolves.toMatchObject({
-      projects: [publishedProject],
-    });
-
-    expect(sqlText(state.wherePredicates[1])).toContain("published");
-  });
-
-  it("creates a private portfolio project under the resolved creator profile", async () => {
-    const project = {
-      id: 42,
-      creatorId: 25,
-      title: "Field study",
-      description: "A real project description.",
-      contentType: "Campaign",
-      published: 0,
-      sortOrder: 3,
-    };
-    state.selectResults.push([{ sortOrder: 2 }], [project]);
-
-    await expect(
-      createPortfolioProject(25, {
-        title: project.title,
-        description: project.description,
-        contentType: project.contentType,
-        imageUrl: null,
-      })
-    ).resolves.toEqual(project);
-    expect(
-      state.events.some(
-        event =>
-          event.includes('"creatorId":25') && event.includes('"published":0')
-      )
-    ).toBe(true);
-  });
-
-  it("does not update or delete a project when the creator does not own it", async () => {
-    state.selectResults.push([]);
-    await expect(
-      updatePortfolioProject(25, 90, { title: "Not mine" })
-    ).resolves.toBeUndefined();
-    expect(state.events.some(event => event.startsWith("update:"))).toBe(false);
-
-    state.deleteAffectedRows = 0;
-    await expect(deletePortfolioProject(25, 90)).resolves.toBe(false);
-  });
-
-  it("reorders the complete owned project set transactionally", async () => {
-    state.selectResults.push([{ id: 1 }, { id: 2 }]);
-
-    await expect(reorderPortfolioProjects(25, [2, 1])).resolves.toBe(true);
-    expect(
-      state.events.filter(event => event.startsWith('update:{"sortOrder":'))
-    ).toHaveLength(2);
-  });
-
-  it("rejects reordering that includes a project belonging to another creator", async () => {
-    state.selectResults.push([{ id: 1 }, { id: 2 }]);
-
-    await expect(reorderPortfolioProjects(25, [1, 99])).resolves.toBe(false);
-    expect(state.events.some(event => event.startsWith("update:"))).toBe(false);
-  });
-
-  it("returns an existing brand save instead of inserting a duplicate", async () => {
-    const saved = { id: 3, brandId: 12, creatorId: profile.id };
-    state.selectResults.push([{ id: profile.id }], [saved]);
-
-    await expect(saveCreator(12, profile.id)).resolves.toEqual(saved);
-    expect(
-      state.events.some(event => event.startsWith("insert:saved_creators:"))
-    ).toBe(false);
-  });
-
-  it("does not update a brief that the brand does not own", async () => {
-    state.selectResults.push([]);
-
-    await expect(
-      updateBriefForBrand(12, 88, { title: "Changed title" })
-    ).resolves.toEqual({ kind: "not-found" });
-    expect(state.events.some(event => event.startsWith("update:"))).toBe(false);
-  });
-
-  it("inserts a new brief and reloads it under its brand owner", async () => {
-    const brief = { id: 42, brandId: 12, title: "A campaign" };
-    state.selectResults.push([brief]);
-
-    await expect(
-      createBrief(12, {
-        title: "A campaign",
-        objective: "Introduce a new product to customers.",
-        contentType: "Brand film",
-        style: "Cinematic",
-        audience: "Designers",
-        platform: "Site",
-        duration: "30 seconds",
-        aspectRatio: "16:9",
-        deliverables: 1,
-        budget: "$2k",
-        deadline: "2026-11-01",
-        location: "Remote",
-        workMode: "remote",
-        licensing: "Commercial use",
-        status: "published",
-      })
-    ).resolves.toEqual(brief);
-    expect(state.events.some(event => event.startsWith("insert:"))).toBe(true);
-  });
-
-  it("does not allow a request to be answered twice", async () => {
-    state.selectResults.push([{ id: 9, status: "accepted" }]);
-
-    await expect(updateCollaborationStatus(23, 9, "declined")).resolves.toEqual(
-      {
-        kind: "invalid-transition",
-      }
-    );
-    expect(state.events.some(event => event.startsWith("update:"))).toBe(false);
-  });
-
-  it("persists the first creator response to a pending request", async () => {
-    state.selectResults.push([{ id: 9, status: "sent" }]);
-
-    await expect(updateCollaborationStatus(23, 9, "accepted")).resolves.toEqual(
-      {
-        kind: "updated",
-      }
-    );
-    expect(
-      state.events.some(event =>
-        event.startsWith('update:{"status":"accepted"}')
-      )
-    ).toBe(true);
-  });
-
-  it("requires an owned published brief and a published creator before collaboration", async () => {
-    state.selectResults.push([{ id: 42 }], [{ id: 17 }]);
-    await expect(canCreateCollaboration(42, 12, 17)).resolves.toBe(true);
-
-    state.selectResults.push([]);
-    await expect(canCreateCollaboration(88, 12, 17)).resolves.toBe(false);
-  });
-
-  it("permits only the supported brief status transitions", () => {
-    expect(isValidBriefStatusTransition("draft", "published")).toBe(true);
-    expect(isValidBriefStatusTransition("published", "closed")).toBe(true);
-    expect(isValidBriefStatusTransition("closed", "published")).toBe(false);
-    expect(isValidBriefStatusTransition("draft", "closed")).toBe(false);
+  it("returns the existing saved creator when the unique constraint rejects a duplicate save", async () => {
+    state.tables.creator_profiles = [{ ...creatorProfile }];
+    state.duplicateSavedCreator = true;
+    state.tables.saved_creators = [{ id: 70, brand_id: "20000000-0000-4000-8000-000000000001", creator_id: 12 }];
+    const saved = await saveCreator(fakeSupabase() as unknown as RequestSupabase, "20000000-0000-4000-8000-000000000001", 12);
+    expect(saved).toMatchObject({ id: 70, creator_id: 12 });
+    expect(state.tables.saved_creators).toHaveLength(1);
   });
 });

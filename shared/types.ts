@@ -3,5 +3,16 @@
  * Import shared types from this single entry point.
  */
 
-export type * from "../drizzle/schema";
+export type {
+	AccountType,
+	BriefRow,
+	BriefStatus,
+	CollaborationRequestRow,
+	CollaborationStatus,
+	CreatorProfileRow,
+	Database,
+	PortfolioProjectRow,
+	ProfileRow,
+	SavedCreatorRow,
+} from "./database.types";
 export * from "./_core/errors";

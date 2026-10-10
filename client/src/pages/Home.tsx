@@ -1,5 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
+import { AuthDialog } from "@/components/AuthDialog";
 import { trpc } from "@/lib/trpc";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -104,7 +104,7 @@ type PersistedCreator = {
     workflow: string;
     verificationStatus: string;
     availability: string;
-    published: number;
+    published: boolean;
   };
   projects: Array<{
     id: number;
@@ -112,7 +112,7 @@ type PersistedCreator = {
     description: string;
     imageUrl: string | null;
     contentType: string;
-    isConcept: number;
+    isConcept: boolean;
     role: string | null;
     challenge: string | null;
     approach: string | null;
@@ -161,13 +161,13 @@ function mapCreator(record: PersistedCreator): Creator {
     verification: profile.verificationStatus.toUpperCase(),
     bio: profile.bio,
     workflow: profile.workflow,
-    published: profile.published === 1,
+    published: profile.published,
     projects: record.projects.map(project => ({
       title: project.title,
       description: project.description,
       type: project.contentType,
       image: project.imageUrl || "",
-      concept: project.isConcept === 1,
+      concept: project.isConcept,
       role: project.role,
       challenge: project.challenge,
       approach: project.approach,
@@ -493,9 +493,11 @@ function Logo() {
 function Topbar({
   demoRole,
   setDemoRole,
+  onLogin,
 }: {
   demoRole: string;
   setDemoRole: (x: string) => void;
+  onLogin: () => void;
 }) {
   const [, setLocation] = useLocation();
   const auth = useAuth();
@@ -570,19 +572,23 @@ function Topbar({
             </div>
           ) : null}
           {auth.user ? (
-            <Button variant="ghost" onClick={() => auth.logout()}>
+            <Button
+              variant="ghost"
+              onClick={async () => {
+                try {
+                  await auth.logout();
+                  toast.success("Signed out");
+                } catch {
+                  toast.error("Could not sign out. Try again.");
+                }
+              }}
+            >
               Log out
             </Button>
           ) : (
             <Button
               variant="primary"
-              onClick={() => {
-                try {
-                  startLogin();
-                } catch {
-                  toast.error("Manus login is not configured in this preview");
-                }
-              }}
+              onClick={onLogin}
             >
               <LogIn size={15} /> Log in
             </Button>
@@ -2698,6 +2704,7 @@ function LiveRequests({
 export default function Home() {
   const [location, setLocation] = useLocation();
   const auth = useAuth();
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const utils = trpc.useUtils();
   const savedState = loadState();
   const [demoRole, setDemoRole] = useState<string>(
@@ -2878,7 +2885,7 @@ export default function Home() {
       rates: profile.rates === "Range not shared" ? undefined : profile.rates,
       formats: profile.formats.join(", "),
       workflow: profile.workflow,
-      published: published ? 1 : 0,
+      published,
     });
     toast.success(published ? "Profile published" : "Profile draft saved");
     return saved ? mapCreator(saved as PersistedCreator) : undefined;
@@ -3042,15 +3049,7 @@ export default function Home() {
             {!isLive && (
               <Button
                 className="mt-5"
-                onClick={() => {
-                  try {
-                    startLogin();
-                  } catch {
-                    toast.error(
-                      "Manus login is not configured in this preview"
-                    );
-                  }
-                }}
+                onClick={() => setAuthDialogOpen(true)}
               >
                 <LogIn size={15} /> Log in to continue
               </Button>
@@ -3286,6 +3285,7 @@ export default function Home() {
     <div className="shell">
       <Topbar
         demoRole={activeRole}
+        onLogin={() => setAuthDialogOpen(true)}
         setDemoRole={role => {
           setDemoRole(role);
           localStorage.setItem(
@@ -3299,7 +3299,7 @@ export default function Home() {
         <main className="min-w-0 flex-1">
           {auth.user && (
             <div className="mx-auto max-w-[1440px] px-5 pt-4 text-xs text-[#8991a2] lg:px-10">
-              Signed in as {auth.user.name || auth.user.email || "Manus user"}.{" "}
+              Signed in as {auth.user.name || auth.user.email || "FrameFoundry user"}.{" "}
               <span className="font-bold text-[var(--indigo)]">
                 Live account
               </span>
@@ -3329,6 +3329,7 @@ export default function Home() {
           </span>
         </div>
       </footer>
+      <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} />
     </div>
   );
 }

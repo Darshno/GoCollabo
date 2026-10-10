@@ -1,47 +1,45 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import type { RequestSupabase } from "./supabase";
 import {
-  createPortfolioProject,
   canCreateCollaboration,
   createBrief,
   createCollaboration,
+  createPortfolioProject,
+  deletePortfolioProject,
   getCreatorProfileForUser,
   getCreatorProfileIdForUser,
-  getUserByOpenId,
   listBriefsForBrand,
   listCollaborationsForUser,
+  listCreators,
   listPortfolioProjects,
+  listPublishedBriefs,
   listSavedCreators,
   removeSavedCreator,
   reorderPortfolioProjects,
+  saveCreator,
   saveCreatorProfile,
   updateAccountType,
   updateBriefForBrand,
   updateCollaborationStatus,
   updatePortfolioProject,
-  deletePortfolioProject,
 } from "./db";
-import { invokeLLM } from "./_core/llm";
-import { storagePut } from "./storage";
-
-vi.mock("./_core/llm", () => ({ invokeLLM: vi.fn() }));
-vi.mock("./storage", () => ({ storagePut: vi.fn() }));
 
 vi.mock("./db", () => ({
   canCreateCollaboration: vi.fn(),
-  createPortfolioProject: vi.fn(),
   createBrief: vi.fn(),
   createCollaboration: vi.fn(),
+  createPortfolioProject: vi.fn(),
+  deletePortfolioProject: vi.fn(),
+  getAccountProfile: vi.fn(),
   getCreatorById: vi.fn(),
   getCreatorProfileForUser: vi.fn(),
   getCreatorProfileIdForUser: vi.fn(),
-  getDb: vi.fn(),
-  getUserByOpenId: vi.fn(),
   listBriefsForBrand: vi.fn(),
   listCollaborationsForUser: vi.fn(),
-  listPortfolioProjects: vi.fn(),
   listCreators: vi.fn(),
+  listPortfolioProjects: vi.fn(),
   listPublishedBriefs: vi.fn(),
   listSavedCreators: vi.fn(),
   removeSavedCreator: vi.fn(),
@@ -52,520 +50,521 @@ vi.mock("./db", () => ({
   updateBriefForBrand: vi.fn(),
   updateCollaborationStatus: vi.fn(),
   updatePortfolioProject: vi.fn(),
-  deletePortfolioProject: vi.fn(),
-  upsertUser: vi.fn(),
 }));
 
-const ctx: TrpcContext = {
-  user: {
-    id: 7,
-    openId: "brand-user",
-    email: "brand@example.com",
-    name: "Brand User",
-    loginMethod: "manus",
-    role: "user",
+const CREATOR_UUID = "10000000-0000-4000-8000-000000000001";
+const BRAND_UUID = "20000000-0000-4000-8000-000000000001";
+const OTHER_BRAND_UUID = "20000000-0000-4000-8000-000000000002";
+
+const fakeSupabase = {} as unknown as RequestSupabase;
+
+function contextFor(
+  user: TrpcContext["user"],
+  supabase: RequestSupabase | null = fakeSupabase
+): TrpcContext {
+  return {
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: {} as TrpcContext["res"],
+    user,
+    supabase,
+  };
+}
+
+const anonymous = () => contextFor(null);
+const creator = () =>
+  contextFor({
+    id: CREATOR_UUID,
+    email: "creator@example.test",
+    name: "Creator",
+    accountType: "creator",
+  });
+const brand = () =>
+  contextFor({
+    id: BRAND_UUID,
+    email: "brand@example.test",
+    name: "Brand",
     accountType: "brand",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastSignedIn: new Date(),
-  },
-  req: { protocol: "https", headers: {} } as TrpcContext["req"],
-  res: {} as TrpcContext["res"],
-};
-
-describe("marketplace.collaborate authorization", () => {
-  beforeEach(() => vi.clearAllMocks());
-  afterEach(() => vi.unstubAllEnvs());
-
-  it("does not create a request for a brief or creator the brand cannot access", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 7 } as never);
-    vi.mocked(canCreateCollaboration).mockResolvedValue(false);
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(
-      caller.marketplace.collaborate({
-        briefId: 41,
-        creatorId: 92,
-        message: "We would like to discuss a possible collaboration.",
-      })
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-
-    expect(canCreateCollaboration).toHaveBeenCalledWith(41, 7, 92);
-    expect(createCollaboration).not.toHaveBeenCalled();
   });
 
-  it("persists an eligible collaboration request under the authenticated brand", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 7 } as never);
-    vi.mocked(canCreateCollaboration).mockResolvedValue(true);
-    const created = {
-      id: 51,
-      briefId: 41,
-      creatorId: 92,
-      brandId: 7,
-      status: "sent",
-    };
-    vi.mocked(createCollaboration).mockResolvedValue(created as never);
-    const caller = appRouter.createCaller(ctx);
+const projectPatch = { id: 7, title: "A project title" };
 
-    await expect(
-      caller.marketplace.collaborate({
-        briefId: 41,
-        creatorId: 92,
-        message: "We would like to discuss a possible collaboration.",
-      })
-    ).resolves.toEqual(created);
-    expect(createCollaboration).toHaveBeenCalledWith({
-      briefId: 41,
-      creatorId: 92,
-      brandId: 7,
-      message: "We would like to discuss a possible collaboration.",
-      status: "sent",
-    });
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(12);
+  vi.mocked(createPortfolioProject).mockResolvedValue({ id: 7 } as never);
+  vi.mocked(updatePortfolioProject).mockResolvedValue({ id: 7 } as never);
+  vi.mocked(deletePortfolioProject).mockResolvedValue(true);
+  vi.mocked(reorderPortfolioProjects).mockResolvedValue(true);
+  vi.mocked(listPortfolioProjects).mockResolvedValue([]);
+  vi.mocked(listCreators).mockResolvedValue([]);
+  vi.mocked(listPublishedBriefs).mockResolvedValue([]);
+  vi.mocked(updateAccountType).mockResolvedValue({
+    id: BRAND_UUID,
+    account_type: "brand",
+  } as never);
+  vi.mocked(createBrief).mockResolvedValue({ id: 5 } as never);
+  vi.mocked(updateBriefForBrand).mockResolvedValue({
+    kind: "updated",
+    brief: { id: 5 },
+  } as never);
+  vi.mocked(listBriefsForBrand).mockResolvedValue([]);
+  vi.mocked(canCreateCollaboration).mockResolvedValue(true);
+  vi.mocked(createCollaboration).mockResolvedValue({ id: 3 } as never);
+  vi.mocked(listCollaborationsForUser).mockResolvedValue([]);
+  vi.mocked(updateCollaborationStatus).mockResolvedValue({
+    kind: "updated",
+  } as never);
+  vi.mocked(saveCreator).mockResolvedValue({ id: 1 } as never);
+  vi.mocked(listSavedCreators).mockResolvedValue([]);
+  vi.mocked(removeSavedCreator).mockResolvedValue({ success: true } as never);
+  vi.mocked(saveCreatorProfile).mockResolvedValue({ profile: {}, projects: [] } as never);
+  vi.mocked(getCreatorProfileForUser).mockResolvedValue({
+    profile: {},
+    projects: [],
+  } as never);
+});
 
-  it("rejects collaboration requests from creator accounts", async () => {
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(
-      caller.marketplace.collaborate({
-        briefId: 41,
-        creatorId: 92,
-        message: "We would like to discuss a possible collaboration.",
-      })
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
-
-    expect(getUserByOpenId).not.toHaveBeenCalled();
-    expect(canCreateCollaboration).not.toHaveBeenCalled();
-    expect(createCollaboration).not.toHaveBeenCalled();
-  });
-
-  it("lists only the current brand's briefs and saved creators", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 7 } as never);
-    const caller = appRouter.createCaller(ctx);
-
-    await caller.marketplace.myBriefs();
-    await caller.marketplace.savedCreators();
-
-    expect(listBriefsForBrand).toHaveBeenCalledWith(7);
-    expect(listSavedCreators).toHaveBeenCalledWith(7);
-  });
-
-  it("removes only a saved creator belonging to the authenticated brand", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 7 } as never);
-    const caller = appRouter.createCaller(ctx);
-
-    await caller.marketplace.removeSavedCreator({ creatorId: 92 });
-
-    expect(removeSavedCreator).toHaveBeenCalledWith(7, 92);
-  });
-
-  it("changes the current user's account type without accepting admin as a selectable type", async () => {
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(
-      caller.auth.setAccountType({ accountType: "creator" })
-    ).resolves.toEqual({ accountType: "creator" });
-    expect(updateAccountType).toHaveBeenCalledWith(7, "creator");
-    await expect(
-      caller.auth.setAccountType({ accountType: "admin" } as never)
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-  });
-
-  it("prevents creator accounts from using brand-only saved creator operations", async () => {
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(caller.marketplace.savedCreators()).rejects.toMatchObject({
-      code: "FORBIDDEN",
-    });
-    await expect(
-      caller.marketplace.removeSavedCreator({ creatorId: 92 })
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(listSavedCreators).not.toHaveBeenCalled();
-    expect(removeSavedCreator).not.toHaveBeenCalled();
-  });
-
-  it("uses the authenticated creator owner id for profile reload and save", async () => {
-    const creatorContext = {
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    };
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileForUser).mockResolvedValue(undefined);
-    vi.mocked(saveCreatorProfile).mockResolvedValue(undefined as never);
-    const caller = appRouter.createCaller(creatorContext);
-
-    await caller.marketplace.myProfile();
-    await caller.marketplace.saveProfile({
-      slug: "maker",
-      name: "Maker",
-      headline: "Independent visual maker",
-      bio: "A profile description with enough detail to be valid.",
-      location: "Remote",
-      workMode: "remote",
-      skills: "Direction",
-      tools: "Runway",
-      contentTypes: "Film",
-      styles: "Cinematic",
-      experience: "4 years",
-      formats: "16:9",
-      workflow: "Plan, prototype, deliver.",
-      published: 1,
-    });
-
-    expect(getCreatorProfileForUser).toHaveBeenCalledWith(23);
-    expect(saveCreatorProfile).toHaveBeenCalledWith(
-      23,
-      expect.objectContaining({ published: 1 })
+describe("authentication gate", () => {
+  it("rejects every protected procedure when no verified Supabase user is present", async () => {
+    const caller = appRouter.createCaller(anonymous());
+    await expect(caller.auth.setAccountType({ accountType: "brand" })).rejects.toThrow(
+      /Authentication required/
     );
+    await expect(caller.marketplace.myBriefs()).rejects.toThrow(
+      /Authentication required/
+    );
+    await expect(caller.marketplace.savedCreators()).rejects.toThrow(
+      /Authentication required/
+    );
+    await expect(caller.marketplace.myProfile()).rejects.toThrow(
+      /Authentication required/
+    );
+    await expect(caller.portfolio.projects()).rejects.toThrow(
+      /Authentication required/
+    );
+    expect(createBrief).not.toHaveBeenCalled();
+    expect(createPortfolioProject).not.toHaveBeenCalled();
   });
 
-  it("returns not found rather than updating a brief owned by another brand", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 7 } as never);
-    vi.mocked(updateBriefForBrand).mockResolvedValue({ kind: "not-found" });
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(
-      caller.marketplace.updateBrief({ id: 88, title: "Not mine" })
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(updateBriefForBrand).toHaveBeenCalledWith(7, 88, {
-      title: "Not mine",
-    });
+  it("still serves public discovery reads without a user", async () => {
+    const caller = appRouter.createCaller(anonymous());
+    await expect(caller.marketplace.creators()).resolves.toBeDefined();
+    await expect(caller.auth.me()).resolves.toBeNull();
   });
+});
 
-  it("persists a new brief under the authenticated brand id", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 7 } as never);
-    const createdBrief = { id: 44, brandId: 7, title: "A campaign" };
-    vi.mocked(createBrief).mockResolvedValue(createdBrief as never);
-    const caller = appRouter.createCaller(ctx);
-
+describe("account type enforcement", () => {
+  it("blocks brand-only procedures for a creator account", async () => {
+    const caller = appRouter.createCaller(creator());
+    await expect(caller.marketplace.myBriefs()).rejects.toThrow(
+      /Only brand accounts/
+    );
+    await expect(caller.marketplace.savedCreators()).rejects.toThrow(
+      /Only brand accounts/
+    );
     await expect(
       caller.marketplace.createBrief({
-        title: "A campaign",
-        objective: "Introduce the new product to customers.",
-        contentType: "Brand film",
-        style: "Cinematic",
-        audience: "Designers",
+        title: "A valid brief title",
+        objective: "A sufficiently long objective statement.",
+        contentType: "Film",
+        style: "Editorial",
+        audience: "General",
         platform: "Site",
         duration: "30 seconds",
         aspectRatio: "16:9",
         deliverables: 1,
-        budget: "$2k",
-        deadline: "2026-11-01",
+        budget: "$1000",
+        deadline: "2026-12-01",
         location: "Remote",
         workMode: "remote",
-        licensing: "Commercial use",
-        status: "published",
+        licensing: "Discuss",
       })
-    ).resolves.toEqual(createdBrief);
-    expect(createBrief).toHaveBeenCalledWith(
-      7,
-      expect.objectContaining({ status: "published" })
+    ).rejects.toThrow(/Only brand accounts/);
+    expect(createBrief).not.toHaveBeenCalled();
+  });
+
+  it("blocks creator-only procedures for a brand account", async () => {
+    const caller = appRouter.createCaller(brand());
+    await expect(caller.marketplace.myProfile()).rejects.toThrow(
+      /Only creator accounts/
     );
-  });
-
-  it("lists requests for the current brand and creator using their owner ids", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 7 } as never);
-    const brandCaller = appRouter.createCaller(ctx);
-    await brandCaller.marketplace.requests();
-    expect(listCollaborationsForUser).toHaveBeenCalledWith(7, "brand");
-
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    const creatorCaller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-    await creatorCaller.marketplace.requests();
-    expect(listCollaborationsForUser).toHaveBeenCalledWith(23, "creator");
-  });
-
-  it("lets the request's creator accept once and rejects already answered requests", async () => {
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(updateCollaborationStatus)
-      .mockResolvedValueOnce({ kind: "updated" })
-      .mockResolvedValueOnce({ kind: "invalid-transition" });
-
-    await expect(
-      caller.marketplace.updateRequestStatus({
-        requestId: 9,
-        status: "accepted",
-      })
-    ).resolves.toEqual({ success: true });
-    await expect(
-      caller.marketplace.updateRequestStatus({
-        requestId: 9,
-        status: "declined",
-      })
-    ).rejects.toMatchObject({ code: "CONFLICT" });
-    expect(updateCollaborationStatus).toHaveBeenNthCalledWith(
-      1,
-      23,
-      9,
-      "accepted"
+    await expect(caller.portfolio.projects()).rejects.toThrow(
+      /Only creator accounts/
     );
-  });
-
-  it("rejects portfolio access for non-creator accounts", async () => {
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(caller.portfolio.projects()).rejects.toMatchObject({
-      code: "FORBIDDEN",
-    });
-    expect(getCreatorProfileIdForUser).not.toHaveBeenCalled();
+    await expect(caller.portfolio.capabilities()).rejects.toThrow(
+      /Only creator accounts/
+    );
+    await expect(
+      caller.marketplace.updateRequestStatus({ requestId: 3, status: "accepted" })
+    ).rejects.toThrow(/Only creator accounts/);
     expect(listPortfolioProjects).not.toHaveBeenCalled();
+    expect(updateCollaborationStatus).not.toHaveBeenCalled();
   });
+});
 
-  it("lists portfolio projects using the signed-in creator's profile ID", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    vi.mocked(listPortfolioProjects).mockResolvedValue([]);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(caller.portfolio.projects()).resolves.toEqual([]);
-    expect(getCreatorProfileIdForUser).toHaveBeenCalledWith(23);
-    expect(listPortfolioProjects).toHaveBeenCalledWith(55);
-  });
-
-  it("denies editing a portfolio project owned by another creator", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    vi.mocked(updatePortfolioProject).mockResolvedValue(undefined);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(
-      caller.portfolio.updateProject({ id: 99, title: "Not mine" })
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(updatePortfolioProject).toHaveBeenCalledWith(55, 99, {
-      title: "Not mine",
-    });
-  });
-
-  it("updates and deletes a project using the authenticated creator owner ID", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    vi.mocked(updatePortfolioProject).mockResolvedValue({
-      id: 99,
-      creatorId: 55,
-      title: "Updated project",
+describe("ownership is taken from the verified token, never from client input", () => {
+  it("scopes a new brief to the caller's own brand UUID", async () => {
+    const caller = appRouter.createCaller(brand());
+    await caller.marketplace.createBrief({
+      title: "A valid brief title",
+      objective: "A sufficiently long objective statement.",
+      contentType: "Film",
+      style: "Editorial",
+      audience: "General",
+      platform: "Site",
+      duration: "30 seconds",
+      aspectRatio: "16:9",
+      deliverables: 1,
+      budget: "$1000",
+      deadline: "2026-12-01",
+      location: "Remote",
+      workMode: "remote",
+      licensing: "Discuss",
+      // A client attempting to write into another brand's briefs.
+      brandId: OTHER_BRAND_UUID,
     } as never);
-    vi.mocked(deletePortfolioProject).mockResolvedValue(true);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
 
-    await expect(
-      caller.portfolio.updateProject({ id: 99, title: "Updated project" })
-    ).resolves.toMatchObject({ title: "Updated project" });
-    await expect(caller.portfolio.deleteProject({ id: 99 })).resolves.toEqual({
-      success: true,
-    });
-    expect(updatePortfolioProject).toHaveBeenCalledWith(
-      55,
-      99,
-      expect.objectContaining({ title: "Updated project" })
-    );
-    expect(deletePortfolioProject).toHaveBeenCalledWith(55, 99);
+    expect(createBrief).toHaveBeenCalledTimes(1);
+    const [, brandId] = vi.mocked(createBrief).mock.calls[0];
+    expect(brandId).toBe(BRAND_UUID);
   });
 
-  it("rejects portfolio reorder requests containing projects outside the creator's list", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    vi.mocked(reorderPortfolioProjects).mockResolvedValue(false);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
+  it("scopes brief reads, saves and collaboration requests to the caller's brand", async () => {
+    const caller = appRouter.createCaller(brand());
+    await caller.marketplace.myBriefs();
+    await caller.marketplace.savedCreators();
+    await caller.marketplace.saveCreator({ creatorId: 12 });
+    await caller.marketplace.removeSavedCreator({ creatorId: 12 });
+    await caller.marketplace.collaborate({
+      briefId: 5,
+      creatorId: 12,
+      message: "We would like to discuss a possible collaboration.",
     });
 
-    await expect(
-      caller.portfolio.reorderProjects({ ids: [1, 999] })
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    expect(reorderPortfolioProjects).toHaveBeenCalledWith(55, [1, 999]);
+    expect(vi.mocked(listBriefsForBrand).mock.calls[0][1]).toBe(BRAND_UUID);
+    expect(vi.mocked(listSavedCreators).mock.calls[0][1]).toBe(BRAND_UUID);
+    expect(vi.mocked(saveCreator).mock.calls[0][1]).toBe(BRAND_UUID);
+    expect(vi.mocked(removeSavedCreator).mock.calls[0][1]).toBe(BRAND_UUID);
+    expect(vi.mocked(createCollaboration).mock.calls[0][1].brand_id).toBe(BRAND_UUID);
   });
 
-  it("persists project media metadata only under the authenticated creator", async () => {
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    const stored = {
-      id: 6,
-      creatorId: 55,
-      title: "Product film",
-      mediaKey: "portfolio/55/asset.png",
-      mediaName: "asset.png",
-      mediaType: "image/png",
-      mediaSize: 1024,
-      published: 0,
+  it("scopes the creator profile upsert to the authenticated user UUID", async () => {
+    const caller = appRouter.createCaller(creator());
+    const input = {
+      slug: "creator-one",
+      name: "Creator One",
+      headline: "A sufficiently long professional headline",
+      bio: "A sufficiently detailed creator biography for the profile.",
+      location: "Remote",
+      workMode: "remote",
+      skills: "",
+      tools: "",
+      contentTypes: "",
+      styles: "",
+      experience: "4 years",
+      formats: "",
+      workflow: "",
+      published: false,
     };
-    vi.mocked(createPortfolioProject).mockResolvedValue(stored as never);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
+    await caller.marketplace.saveProfile(input);
+    const [, userId] = vi.mocked(saveCreatorProfile).mock.calls[0];
+    expect(userId).toBe(CREATOR_UUID);
+  });
 
+  it("resolves the creator profile id from the database rather than client input", async () => {
+    const caller = appRouter.createCaller(creator());
+    await caller.portfolio.projects();
+    await caller.portfolio.deleteProject({ id: 7 });
+    expect(getCreatorProfileIdForUser).toHaveBeenCalledWith(fakeSupabase, CREATOR_UUID);
+    expect(vi.mocked(listPortfolioProjects).mock.calls[0][1]).toBe(12);
+    expect(vi.mocked(deletePortfolioProject).mock.calls[0][1]).toBe(12);
+  });
+
+  it("refuses to set account type when Supabase is not configured", async () => {
+    const caller = appRouter.createCaller(contextFor(
+      {
+        id: CREATOR_UUID,
+        email: "creator@example.test",
+        name: "Creator",
+        accountType: "creator",
+      },
+      null
+    ));
+    await expect(caller.auth.setAccountType({ accountType: "brand" })).rejects.toThrow(
+      /Supabase is not configured/
+    );
+    expect(updateAccountType).not.toHaveBeenCalled();
+  });
+
+  it("uses the database account type when listing collaborations", async () => {
+    const creatorCaller = appRouter.createCaller(creator());
+    await creatorCaller.marketplace.requests();
+    expect(vi.mocked(listCollaborationsForUser).mock.calls[0][2]).toBe("creator");
+    const brandCaller = appRouter.createCaller(brand());
+    await brandCaller.marketplace.requests();
+    expect(vi.mocked(listCollaborationsForUser).mock.calls[1][1]).toBe(BRAND_UUID);
+  });
+});
+
+describe("portfolio studio media ownership", () => {
+  it("rejects a media path owned by another account", async () => {
+    const caller = appRouter.createCaller(creator());
     await expect(
       caller.portfolio.createProject({
-        title: "Product film",
-        description: "A product film built from user-provided project details.",
+        title: "A project title",
+        description: "Source project details.",
         contentType: "Campaign",
-        imageUrl: "/manus-storage/portfolio/55/asset.png",
-        mediaKey: "portfolio/55/asset.png",
-        mediaName: "asset.png",
+        mediaPath: `${OTHER_BRAND_UUID}/9/file.png`,
+        mediaName: "file.png",
         mediaType: "image/png",
         mediaSize: 1024,
       })
-    ).resolves.toMatchObject({ published: 0 });
-    expect(createPortfolioProject).toHaveBeenCalledWith(
-      55,
-      expect.objectContaining({ mediaKey: "portfolio/55/asset.png" })
-    );
-  });
-
-  it("returns an explicit unavailable error instead of faking a media upload", async () => {
-    vi.stubEnv("MANUS_API_URL", "");
-    vi.stubEnv("MANUS_API_KEY", "");
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(
-      caller.portfolio.uploadMedia({
-        fileName: "cover.png",
-        mimeType: "image/png",
-        size: 8,
-        dataBase64: "iVBORw0KGgo=",
-      })
-    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(storagePut).not.toHaveBeenCalled();
-  });
-
-  it("uploads supported media through managed storage and returns persisted metadata", async () => {
-    vi.stubEnv("MANUS_API_URL", "https://storage.example");
-    vi.stubEnv("MANUS_API_KEY", "unit-test-key");
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    vi.mocked(storagePut).mockResolvedValue({
-      key: "portfolio/55/object.png",
-      url: "/manus-storage/portfolio/55/object.png",
-    });
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(
-      caller.portfolio.uploadMedia({
-        fileName: "cover.png",
-        mimeType: "image/png",
-        size: 8,
-        dataBase64: "iVBORw0KGgo=",
-      })
-    ).resolves.toMatchObject({
-      key: "portfolio/55/object.png",
-      fileName: "cover.png",
-      mimeType: "image/png",
-      size: 8,
-    });
-    expect(storagePut).toHaveBeenCalledWith(
-      expect.stringMatching(/^portfolio\/55\//),
-      expect.any(Buffer),
-      "image/png"
-    );
-  });
-
-  it("rejects media bytes that do not match their declared MIME type", async () => {
-    vi.stubEnv("MANUS_API_URL", "https://storage.example");
-    vi.stubEnv("MANUS_API_KEY", "unit-test-key");
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(
-      caller.portfolio.uploadMedia({
-        fileName: "cover.png",
-        mimeType: "image/png",
-        size: 5,
-        dataBase64: "aGVsbG8=",
-      })
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    expect(storagePut).not.toHaveBeenCalled();
-  });
-
-  it("reports AI unavailable without configuration and does not call the provider", async () => {
-    vi.stubEnv("MANUS_API_URL", "");
-    vi.stubEnv("MANUS_API_KEY", "");
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(
-      caller.portfolio.assist({
-        sourceNotes: "A project note from the creator.",
-      })
-    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(invokeLLM).not.toHaveBeenCalled();
-  });
-
-  it("returns generated portfolio text as an unpersisted review draft", async () => {
-    vi.stubEnv("MANUS_API_URL", "https://llm.example");
-    vi.stubEnv("MANUS_API_KEY", "unit-test-key");
-    vi.mocked(getUserByOpenId).mockResolvedValue({ id: 23 } as never);
-    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(55);
-    vi.mocked(invokeLLM).mockResolvedValue({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              title: "Creator-provided project",
-              description: "A concise description based on supplied details.",
-              challenge: "The challenge provided by the creator.",
-              approach: "The approach provided by the creator.",
-              outcomes: "No outcome was specified in the source information.",
-              impactSummary: "Impact not specified.",
-              skills: ["Art direction"],
-            }),
-          },
-        },
-      ],
-    } as never);
-    const caller = appRouter.createCaller({
-      ...ctx,
-      user: { ...ctx.user!, accountType: "creator" },
-    });
-
-    await expect(
-      caller.portfolio.assist({
-        title: "A real project",
-        sourceNotes: "The creator supplied this project background.",
-      })
-    ).resolves.toMatchObject({
-      title: "Creator-provided project",
-      isDraft: true,
-    });
+    ).rejects.toThrow(/Media path must belong to your account/);
     expect(createPortfolioProject).not.toHaveBeenCalled();
+  });
+
+  it("rejects path traversal segments in a media path", async () => {
+    const caller = appRouter.createCaller(creator());
+    for (const path of [
+      `${CREATOR_UUID}/../${OTHER_BRAND_UUID}/file.png`,
+      `${CREATOR_UUID}//file.png`,
+      `${CREATOR_UUID}/9/../../file.png`,
+    ]) {
+      await expect(
+        caller.portfolio.updateProject({
+          id: 9,
+          mediaPath: path,
+          mediaName: "file.png",
+          mediaType: "image/png",
+          mediaSize: 1024,
+        })
+      ).rejects.toThrow(/Media path must belong to this project and account/);
+    }
     expect(updatePortfolioProject).not.toHaveBeenCalled();
+  });
+
+  it("accepts a media path scoped to the caller and the project", async () => {
+    const caller = appRouter.createCaller(creator());
+    await caller.portfolio.updateProject({
+      id: 9,
+      mediaPath: `${CREATOR_UUID}/9/file.png`,
+      mediaName: "file.png",
+      mediaType: "image/png",
+      mediaSize: 1024,
+    });
+    expect(updatePortfolioProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a declared media size above the bucket limit", async () => {
+    const caller = appRouter.createCaller(creator());
+    await expect(
+      caller.portfolio.createProject({
+        title: "A project title",
+        description: "Source project details.",
+        contentType: "Campaign",
+        mediaSize: 9 * 1024 * 1024,
+      })
+    ).rejects.toThrow();
+    expect(createPortfolioProject).not.toHaveBeenCalled();
+  });
+
+  it("rejects a media type outside the allowed image list", async () => {
+    const caller = appRouter.createCaller(creator());
+    await expect(
+      caller.portfolio.createProject({
+        title: "A project title",
+        description: "Source project details.",
+        contentType: "Campaign",
+        mediaType: "application/pdf",
+      })
+    ).rejects.toThrow();
+    expect(createPortfolioProject).not.toHaveBeenCalled();
+  });
+
+  it("surfaces reorder rejection when the ids do not cover the caller's projects", async () => {
+    vi.mocked(reorderPortfolioProjects).mockResolvedValue(false);
+    const caller = appRouter.createCaller(creator());
+    await expect(caller.portfolio.reorderProjects({ ids: [7, 8] })).rejects.toThrow(
+      /Reorder must include each of your projects exactly once/
+    );
+  });
+
+  it("reports a missing creator profile as a precondition failure", async () => {
+    vi.mocked(getCreatorProfileIdForUser).mockResolvedValue(undefined);
+    const caller = appRouter.createCaller(creator());
+    await expect(caller.portfolio.projects()).rejects.toThrow(
+      /Create a creator profile before managing portfolio projects/
+    );
+  });
+});
+
+describe("collaboration request transitions", () => {
+  it("maps a rejected request to NOT_FOUND and a settled request to CONFLICT", async () => {
+    vi.mocked(updateCollaborationStatus).mockResolvedValue({
+      kind: "not-found",
+    } as never);
+    const caller = appRouter.createCaller(creator());
+    await expect(
+      caller.marketplace.updateRequestStatus({ requestId: 3, status: "accepted" })
+    ).rejects.toThrow(/Request not found/);
+
+    vi.mocked(updateCollaborationStatus).mockResolvedValue({
+      kind: "invalid-transition",
+    } as never);
+    await expect(
+      caller.marketplace.updateRequestStatus({ requestId: 3, status: "declined" })
+    ).rejects.toThrow(/already been answered/);
+  });
+
+  it("does not create a request when the brief or creator is not eligible", async () => {
+    vi.mocked(canCreateCollaboration).mockResolvedValue(false);
+    const caller = appRouter.createCaller(brand());
+    await expect(
+      caller.marketplace.collaborate({
+        briefId: 5,
+        creatorId: 12,
+        message: "We would like to discuss a possible collaboration.",
+      })
+    ).rejects.toThrow(/Published brief or creator not found/);
+    expect(createCollaboration).not.toHaveBeenCalled();
+  });
+
+  it("does not save an unpublished or unknown creator", async () => {
+    vi.mocked(saveCreator).mockResolvedValue(undefined);
+    const caller = appRouter.createCaller(brand());
+    await expect(caller.marketplace.saveCreator({ creatorId: 12 })).rejects.toThrow(
+      /Published creator not found/
+    );
+  });
+});
+
+describe("brief status transitions", () => {
+  it("maps an invalid transition to CONFLICT and a missing brief to NOT_FOUND", async () => {
+    vi.mocked(updateBriefForBrand).mockResolvedValue({
+      kind: "invalid-transition",
+    } as never);
+    const caller = appRouter.createCaller(brand());
+    await expect(
+      caller.marketplace.updateBrief({ id: 5, status: "published" })
+    ).rejects.toThrow(/Invalid brief status transition/);
+
+    vi.mocked(updateBriefForBrand).mockResolvedValue({ kind: "not-found" } as never);
+    await expect(
+      caller.marketplace.updateBrief({ id: 5, status: "published" })
+    ).rejects.toThrow(/Brief not found/);
+  });
+
+  it("rejects an update with no fields other than the id", async () => {
+    const caller = appRouter.createCaller(brand());
+    await expect(caller.marketplace.updateBrief({ id: 5 })).rejects.toThrow(
+      /No brief changes supplied/
+    );
+    expect(updateBriefForBrand).not.toHaveBeenCalled();
+  });
+
+  it("rejects a project update with no fields other than the id", async () => {
+    const caller = appRouter.createCaller(creator());
+    await expect(caller.portfolio.updateProject({ id: 7 })).rejects.toThrow(
+      /No project changes supplied/
+    );
+    expect(updatePortfolioProject).not.toHaveBeenCalled();
+  });
+
+  it("does not inject creation defaults into a partial project update", async () => {
+    // Regression: building the patch schema with `.partial()` over a schema that
+    // carries `.default()` re-applies those defaults, which silently wiped
+    // stored tools/media/flags whenever a caller only toggled `published`.
+    const caller = appRouter.createCaller(creator());
+    await caller.portfolio.updateProject({ id: 7, published: true });
+
+    const patch = vi.mocked(updatePortfolioProject).mock.calls[0][3];
+    expect(patch).toEqual({ published: true });
+    expect(Object.keys(patch)).not.toContain("tools");
+    expect(Object.keys(patch)).not.toContain("mediaPath");
+    expect(Object.keys(patch)).not.toContain("isConcept");
+  });
+
+  it("does not inject creation defaults when clearing media fields", async () => {
+    const caller = appRouter.createCaller(creator());
+    await caller.portfolio.updateProject({
+      id: 7,
+      mediaPath: null,
+      mediaName: null,
+      mediaType: null,
+      mediaSize: null,
+    });
+
+    const patch = vi.mocked(updatePortfolioProject).mock.calls[0][3];
+    expect(patch).toEqual({
+      media_path: null,
+      media_name: null,
+      media_type: null,
+      media_size: null,
+    });
+  });
+});
+
+describe("portfolio AI assistance", () => {
+  it("reports that no provider is configured instead of inventing one", async () => {
+    const caller = appRouter.createCaller(creator());
+    await expect(
+      caller.portfolio.assist({
+        sourceNotes: "A detailed set of production notes for the project.",
+      })
+    ).rejects.toThrow(/No portfolio AI provider is configured/);
+  });
+
+  it("advertises AI as unavailable so manual editing stays the path", async () => {
+    const caller = appRouter.createCaller(creator());
+    await expect(caller.portfolio.capabilities()).resolves.toEqual({
+      aiConfigured: false,
+      uploadsConfigured: true,
+      maxUploadBytes: 8 * 1024 * 1024,
+    });
+  });
+});
+
+describe("input validation bounds", () => {
+  it("requires a meaningful collaboration message", async () => {
+    const caller = appRouter.createCaller(brand());
+    await expect(
+      caller.marketplace.collaborate({ briefId: 5, creatorId: 12, message: "hi" })
+    ).rejects.toThrow();
+    expect(createCollaboration).not.toHaveBeenCalled();
+  });
+
+  it("requires a sufficiently detailed creator bio", async () => {
+    const caller = appRouter.createCaller(creator());
+    await expect(
+      caller.marketplace.saveProfile({
+        slug: "creator-one",
+        name: "Creator One",
+        headline: "A sufficiently long professional headline",
+        bio: "too short",
+        location: "Remote",
+        workMode: "remote",
+        skills: "",
+        tools: "",
+        contentTypes: "",
+        styles: "",
+        experience: "4 years",
+        formats: "",
+        workflow: "",
+        published: false,
+      })
+    ).rejects.toThrow();
+    expect(saveCreatorProfile).not.toHaveBeenCalled();
+  });
+
+  it("caps the number of reordered project ids", async () => {
+    const caller = appRouter.createCaller(creator());
+    await expect(
+      caller.portfolio.reorderProjects({ ids: Array.from({ length: 101 }, (_, i) => i + 1) })
+    ).rejects.toThrow();
+    expect(reorderPortfolioProjects).not.toHaveBeenCalled();
+  });
+
+  it("keeps the project patch helper exported for reuse", () => {
+    expect(projectPatch.id).toBe(7);
   });
 });

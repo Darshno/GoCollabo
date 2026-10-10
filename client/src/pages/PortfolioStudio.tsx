@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   ArrowDown,
@@ -27,11 +28,11 @@ type ProjectForm = {
   outcomes: string;
   impactSummary: string;
   imageUrl: string | null;
-  mediaKey: string | null;
+  mediaPath: string | null;
   mediaName: string | null;
   mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | null;
   mediaSize: number | null;
-  isConcept: number;
+  isConcept: boolean;
   published: boolean;
 };
 
@@ -58,11 +59,11 @@ const emptyProject = (): ProjectForm => ({
   outcomes: "",
   impactSummary: "",
   imageUrl: null,
-  mediaKey: null,
+  mediaPath: null,
   mediaName: null,
   mediaType: null,
   mediaSize: null,
-  isConcept: 0,
+  isConcept: false,
   published: false,
 });
 
@@ -73,24 +74,13 @@ const managedImageTypes = [
   "image/gif",
 ];
 
-function fileToBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read selected file"));
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        reject(new Error("Could not read selected file"));
-        return;
-      }
-      const separator = reader.result.indexOf(",");
-      if (separator < 0) {
-        reject(new Error("Could not encode selected file"));
-        return;
-      }
-      resolve(reader.result.slice(separator + 1));
-    };
-    reader.readAsDataURL(file);
-  });
+async function matchesImageSignature(file: File) {
+  const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (file.type === "image/jpeg") return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (file.type === "image/png") return [137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value);
+  if (file.type === "image/gif") return new TextDecoder().decode(bytes.slice(0, 6)).match(/^GIF8[79]a$/) !== null;
+  return new TextDecoder().decode(bytes.slice(0, 4)) === "RIFF" &&
+    new TextDecoder().decode(bytes.slice(8, 12)) === "WEBP";
 }
 
 function StudioButton({
@@ -172,11 +162,11 @@ export default function PortfolioStudio() {
   const updateProject = trpc.portfolio.updateProject.useMutation();
   const deleteProject = trpc.portfolio.deleteProject.useMutation();
   const reorderProjects = trpc.portfolio.reorderProjects.useMutation();
-  const uploadMedia = trpc.portfolio.uploadMedia.useMutation();
   const assist = trpc.portfolio.assist.useMutation();
   const [form, setForm] = useState<ProjectForm>(emptyProject);
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [assistError, setAssistError] = useState("");
   const [assistDraft, setAssistDraft] = useState<AssistDraft | null>(null);
@@ -215,12 +205,12 @@ export default function PortfolioStudio() {
       outcomes: project.outcomes || "",
       impactSummary: project.impactSummary || "",
       imageUrl: project.imageUrl,
-      mediaKey: project.mediaKey,
+      mediaPath: project.mediaPath,
       mediaName: project.mediaName,
       mediaType: project.mediaType as ProjectForm["mediaType"],
       mediaSize: project.mediaSize,
       isConcept: project.isConcept,
-      published: project.published === 1,
+      published: project.published,
     });
     setAssistDraft(null);
     setAssistError("");
@@ -254,8 +244,7 @@ export default function PortfolioStudio() {
       approach: form.approach.trim(),
       outcomes: form.outcomes.trim(),
       impactSummary: form.impactSummary.trim(),
-      imageUrl: form.imageUrl,
-      mediaKey: form.mediaKey,
+      mediaPath: form.mediaPath,
       mediaName: form.mediaName,
       mediaType: form.mediaType,
       mediaSize: form.mediaSize,
@@ -267,13 +256,13 @@ export default function PortfolioStudio() {
         await updateProject.mutateAsync({
           id: form.id,
           ...projectData,
-          published: publish ? 1 : form.published ? 1 : 0,
+          published: publish ? true : form.published,
         });
       } else {
         const created = await createProject.mutateAsync(projectData);
-        setForm(current => ({ ...current, id: created.id }));
+        setForm(current => ({ ...current, id: created.id, published: false }));
         if (publish) {
-          await updateProject.mutateAsync({ id: created.id, published: 1 });
+          await updateProject.mutateAsync({ id: created.id, published: true });
         }
       }
       await refreshProjects();
@@ -300,7 +289,7 @@ export default function PortfolioStudio() {
     try {
       await updateProject.mutateAsync({
         id: project.id,
-        published: project.published ? 0 : 1,
+        published: !project.published,
       });
       await refreshProjects();
       toast.success(
@@ -314,7 +303,7 @@ export default function PortfolioStudio() {
   const unpublishCurrentProject = async () => {
     if (!form.id) return;
     try {
-      await updateProject.mutateAsync({ id: form.id, published: 0 });
+      await updateProject.mutateAsync({ id: form.id, published: false });
       setForm(current => ({ ...current, published: false }));
       await refreshProjects();
       toast.success("Project moved to drafts");
@@ -338,6 +327,34 @@ export default function PortfolioStudio() {
       toast.success("Project deleted");
     } catch {
       toast.error("Could not delete the project");
+    }
+  };
+
+  const removeCurrentMedia = async () => {
+    if (!form.id || !form.mediaPath) return;
+    try {
+      const { error: storageError } = await supabase.storage
+        .from("portfolio-media")
+        .remove([form.mediaPath]);
+      if (storageError) throw storageError;
+      await updateProject.mutateAsync({
+        id: form.id,
+        mediaPath: null,
+        mediaName: null,
+        mediaType: null,
+        mediaSize: null,
+      });
+      setForm(current => ({
+        ...current,
+        imageUrl: null,
+        mediaPath: null,
+        mediaName: null,
+        mediaType: null,
+        mediaSize: null,
+      }));
+      await refreshProjects();
+    } catch {
+      toast.error("Could not remove project media");
     }
   };
 
@@ -365,30 +382,89 @@ export default function PortfolioStudio() {
       setUploadError("This image is larger than the 8 MB upload limit.");
       return;
     }
+    if (!(await matchesImageSignature(file))) {
+      setUploadError("The image contents do not match the selected file type.");
+      return;
+    }
+    if (!isSupabaseConfigured || !capabilities.data?.uploadsConfigured) {
+      setUploadError("Supabase Storage is not configured. Project text can still be saved.");
+      return;
+    }
+    if (form.title.trim().length < 2 || !form.description.trim() || !form.contentType.trim()) {
+      setUploadError("Add a title, category, and description before uploading project media.");
+      return;
+    }
     setUploadError("");
+    setUploading(true);
     try {
-      const dataBase64 = await fileToBase64(file);
-      const stored = await uploadMedia.mutateAsync({
-        fileName: file.name,
-        mimeType: file.type as ProjectForm["mediaType"] & string,
-        size: file.size,
-        dataBase64,
-      });
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) throw new Error("Sign in again before uploading media.");
+      let projectId = form.id;
+      if (!projectId) {
+        const created = await createProject.mutateAsync({
+          title: form.title.trim(),
+          description: form.description.trim(),
+          contentType: form.contentType.trim(),
+          tools: form.tools.trim(),
+          skills: form.skills.trim(),
+          role: form.role.trim(),
+          challenge: form.challenge.trim(),
+          approach: form.approach.trim(),
+          outcomes: form.outcomes.trim(),
+          impactSummary: form.impactSummary.trim(),
+          mediaPath: null,
+          mediaName: null,
+          mediaType: null,
+          mediaSize: null,
+          isConcept: form.isConcept,
+        });
+        projectId = created.id;
+        setForm(current => ({ ...current, id: created.id, published: false }));
+        await utils.portfolio.projects.invalidate();
+      }
+      const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "img";
+      const mediaPath = `${authData.user.id}/${projectId}/${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from("portfolio-media")
+        .upload(mediaPath, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from("portfolio-media")
+        .createSignedUrl(mediaPath, 3600);
+      if (signedError) {
+        await supabase.storage.from("portfolio-media").remove([mediaPath]);
+        throw signedError;
+      }
+      try {
+        await updateProject.mutateAsync({
+          id: projectId,
+          mediaPath,
+          mediaName: file.name.split(/[\\/]/).pop() || "portfolio-image",
+          mediaType: file.type as NonNullable<ProjectForm["mediaType"]>,
+          mediaSize: file.size,
+        });
+      } catch (error) {
+        await supabase.storage.from("portfolio-media").remove([mediaPath]);
+        throw error;
+      }
       setForm(current => ({
         ...current,
-        imageUrl: stored.url,
-        mediaKey: stored.key,
-        mediaName: stored.fileName,
-        mediaType: stored.mimeType,
-        mediaSize: stored.size,
+        imageUrl: signedData.signedUrl,
+        mediaPath,
+        mediaName: file.name.split(/[\\/]/).pop() || "portfolio-image",
+        mediaType: file.type as NonNullable<ProjectForm["mediaType"]>,
+        mediaSize: file.size,
       }));
-      toast.success("Image uploaded. Save the project to attach it.");
+      await refreshProjects();
+      toast.success("Image uploaded securely to your project");
     } catch (error) {
       setUploadError(
         error instanceof Error
           ? error.message
           : "Upload failed. Check storage setup and retry."
       );
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -397,13 +473,6 @@ export default function PortfolioStudio() {
     try {
       const draft = await assist.mutateAsync({
         title: form.title,
-        category: form.contentType,
-        role: form.role,
-        tools: form.tools,
-        skills: form.skills,
-        challenge: form.challenge,
-        approach: form.approach,
-        outcomes: form.outcomes,
         sourceNotes: [
           form.description,
           form.challenge,
@@ -509,7 +578,7 @@ export default function PortfolioStudio() {
             <p className="mt-1 text-xs leading-5 text-[#687087]">
               {capabilities.data?.aiConfigured
                 ? "Configured. Suggestions remain drafts for your review."
-                : "Unavailable until MANUS_API_URL and MANUS_API_KEY are configured on the server. You can still edit projects manually."}
+                : "No AI provider is configured. You can continue editing projects manually."}
             </p>
           </div>
         </div>
@@ -519,8 +588,8 @@ export default function PortfolioStudio() {
             <div className="text-sm font-bold">Managed media storage</div>
             <p className="mt-1 text-xs leading-5 text-[#687087]">
               {capabilities.data?.uploadsConfigured
-                ? "Configured. Images upload through managed storage and attach when you save a project."
-                : "Unavailable until MANUS_API_URL and MANUS_API_KEY are configured on the server. Project text can be saved without media."}
+                ? "Configured. Images upload to your private Supabase Storage folder and attach to the project."
+                : "Supabase is not configured. Project text can still be saved without media."}
             </p>
           </div>
         </div>
@@ -778,16 +847,17 @@ export default function PortfolioStudio() {
                     </p>
                   </div>
                   <label
-                    className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--line)] px-4 py-2 text-sm font-semibold ${capabilities.data?.uploadsConfigured ? "hover:bg-[#f7f8fb]" : "cursor-not-allowed opacity-50"}`}
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--line)] px-4 py-2 text-sm font-semibold ${capabilities.data?.uploadsConfigured && isSupabaseConfigured ? "hover:bg-[#f7f8fb]" : "cursor-not-allowed opacity-50"}`}
                   >
                     <Upload size={15} />{" "}
-                    {uploadMedia.isPending ? "Uploading…" : "Choose image"}
+                    {uploading ? "Uploading…" : "Choose image"}
                     <input
                       type="file"
                       accept="image/jpeg,image/png,image/webp,image/gif"
                       disabled={
                         !capabilities.data?.uploadsConfigured ||
-                        uploadMedia.isPending
+                        !isSupabaseConfigured ||
+                        uploading
                       }
                       onChange={event => {
                         const file = event.currentTarget.files?.[0];
@@ -821,16 +891,7 @@ export default function PortfolioStudio() {
                     </span>
                     <button
                       type="button"
-                      onClick={() =>
-                        setForm(current => ({
-                          ...current,
-                          imageUrl: null,
-                          mediaKey: null,
-                          mediaName: null,
-                          mediaType: null,
-                          mediaSize: null,
-                        }))
-                      }
+                        onClick={() => void removeCurrentMedia()}
                       className="rounded-full p-2 text-[#687087] hover:bg-[#f0f2f7]"
                       aria-label="Remove project image"
                     >
@@ -838,10 +899,9 @@ export default function PortfolioStudio() {
                     </button>
                   </div>
                 )}
-                {form.mediaKey && (
+                {form.mediaPath && (
                   <p className="mt-2 text-xs text-[#687087]">
-                    Uploaded to managed storage. Save the project to attach its
-                    metadata.
+                    Stored privately in Supabase Storage at this project's owner-scoped path.
                   </p>
                 )}
               </div>
@@ -951,11 +1011,11 @@ export default function PortfolioStudio() {
               <label className="flex items-center gap-2 text-sm text-[#687087]">
                 <input
                   type="checkbox"
-                  checked={form.isConcept === 1}
+                  checked={form.isConcept}
                   onChange={event =>
                     setForm(current => ({
                       ...current,
-                      isConcept: event.target.checked ? 1 : 0,
+                      isConcept: event.target.checked,
                     }))
                   }
                   className="accent-[var(--navy)]"

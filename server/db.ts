@@ -1,643 +1,708 @@
-import { and, asc, desc, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import {
-  creatorProfiles,
-  InsertUser,
-  users,
-  briefs,
-  savedCreators,
-  collaborationRequests,
-  portfolioProjects,
-  brandProfiles,
-} from "../drizzle/schema";
-import { ENV } from "./_core/env";
+import type {
+  AccountType,
+  BriefRow,
+  BriefStatus,
+  CollaborationRequestRow,
+  CollaborationStatus,
+  CreatorProfileRow,
+  PortfolioProjectRow,
+  ProfileRow,
+  SavedCreatorRow,
+} from "../shared/database.types";
+import { createSupabaseClient, type RequestSupabase } from "./supabase";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+export type AppUser = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  accountType: AccountType;
+  role: "user";
+};
 
-export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-    }
-  }
-  return _db;
-}
+export type CreatorProfileRecord = {
+  id: number;
+  userId: string;
+  slug: string;
+  name: string;
+  headline: string;
+  bio: string;
+  location: string;
+  workMode: CreatorProfileRow["work_mode"];
+  skills: string;
+  tools: string;
+  contentTypes: string;
+  styles: string;
+  experience: string;
+  rates: string | null;
+  formats: string;
+  workflow: string;
+  verificationStatus: CreatorProfileRow["verification_status"];
+  availability: CreatorProfileRow["availability"];
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) throw new Error("User openId is required for upsert");
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const values: InsertUser = { openId: user.openId };
-  const updateSet: Record<string, unknown> = {};
-  (["name", "email", "loginMethod", "accountType"] as const).forEach(field => {
-    if (user[field] !== undefined) {
-      values[field] = user[field] as never;
-      updateSet[field] = user[field];
-    }
-  });
-  if (user.lastSignedIn) {
-    values.lastSignedIn = user.lastSignedIn;
-    updateSet.lastSignedIn = user.lastSignedIn;
-  }
-  if (user.role) {
-    values.role = user.role;
-    updateSet.role = user.role;
-  } else if (user.openId === ENV.ownerOpenId) {
-    values.role = "admin";
-    updateSet.role = "admin";
-  }
-  values.lastSignedIn ??= new Date();
-  updateSet.lastSignedIn ??= new Date();
-  await db
-    .insert(users)
-    .values(values)
-    .onDuplicateKeyUpdate({ set: updateSet });
-}
+export type PortfolioProjectRecord = {
+  id: number;
+  creatorId: number;
+  title: string;
+  description: string;
+  contentType: string;
+  tools: string;
+  skills: string;
+  role: string;
+  challenge: string;
+  approach: string;
+  outcomes: string;
+  impactSummary: string;
+  mediaPath: string | null;
+  mediaName: string | null;
+  mediaType: string | null;
+  mediaSize: number | null;
+  imageUrl: string | null;
+  isConcept: boolean;
+  published: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
 
-export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db
-    .select()
-    .from(users)
-    .where(eq(users.openId, openId))
-    .limit(1);
-  return result[0];
-}
+export type BriefRecord = {
+  id: number;
+  brandId: string;
+  title: string;
+  objective: string;
+  contentType: string;
+  style: string;
+  audience: string;
+  platform: string;
+  duration: string;
+  aspectRatio: string;
+  deliverables: number;
+  budget: string;
+  deadline: string;
+  location: string;
+  workMode: "remote" | "hybrid" | "on-site";
+  licensing: string;
+  status: BriefStatus;
+  createdAt: string;
+  updatedAt: string;
+};
 
-export async function updateAccountType(
-  userId: number,
-  accountType: "creator" | "brand"
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  await db.update(users).set({ accountType }).where(eq(users.id, userId));
-}
+export type CollaborationRecord = {
+  request: {
+    id: number;
+    briefId: number;
+    brandId: string;
+    creatorId: number;
+    message: string;
+    status: CollaborationStatus;
+    createdAt: string;
+    updatedAt: string;
+  };
+  briefTitle: string;
+  creatorName?: string | null;
+  brandName?: string | null;
+};
 
-export async function listCreators() {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  return db
-    .select()
-    .from(creatorProfiles)
-    .where(eq(creatorProfiles.published, 1))
-    .orderBy(desc(creatorProfiles.updatedAt));
-}
-
-export async function getCreatorById(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [profile] = await db
-    .select()
-    .from(creatorProfiles)
-    .where(and(eq(creatorProfiles.id, id), eq(creatorProfiles.published, 1)))
-    .limit(1);
-  if (!profile) return undefined;
-  const projects = await db
-    .select()
-    .from(portfolioProjects)
-    .where(
-      and(
-        eq(portfolioProjects.creatorId, id),
-        eq(portfolioProjects.published, 1)
-      )
-    )
-    .orderBy(portfolioProjects.sortOrder, desc(portfolioProjects.createdAt));
-  return { profile, projects };
-}
-
-export async function getCreatorProfileForUser(userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [profile] = await db
-    .select()
-    .from(creatorProfiles)
-    .where(eq(creatorProfiles.userId, userId))
-    .limit(1);
-  if (!profile) return undefined;
-  const projects = await db
-    .select()
-    .from(portfolioProjects)
-    .where(eq(portfolioProjects.creatorId, profile.id))
-    .orderBy(desc(portfolioProjects.createdAt));
-  return { profile, projects };
-}
-
-export async function getCreatorProfileIdForUser(userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [profile] = await db
-    .select({ id: creatorProfiles.id })
-    .from(creatorProfiles)
-    .where(eq(creatorProfiles.userId, userId))
-    .limit(1);
-  return profile?.id;
-}
+export type CreatorProfileInput = Omit<
+  CreatorProfileRecord,
+  "id" | "userId" | "createdAt" | "updatedAt" | "verificationStatus" | "availability" | "rates"
+> & { rates?: string | null };
 
 export type PortfolioProjectInput = Omit<
-  typeof portfolioProjects.$inferInsert,
-  "id" | "creatorId" | "createdAt" | "sortOrder" | "published"
+  PortfolioProjectRecord,
+  "id" | "creatorId" | "createdAt" | "updatedAt" | "imageUrl" | "sortOrder" | "published"
 >;
 
 export type PortfolioProjectUpdate = Partial<PortfolioProjectInput> & {
-  published?: number;
+  published?: boolean;
+  sortOrder?: number;
 };
 
-export async function listPortfolioProjects(creatorId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  return db
-    .select()
-    .from(portfolioProjects)
-    .where(eq(portfolioProjects.creatorId, creatorId))
-    .orderBy(
-      asc(portfolioProjects.sortOrder),
-      desc(portfolioProjects.createdAt)
-    );
+export type BriefInput = Omit<BriefRecord, "id" | "brandId" | "createdAt" | "updatedAt">;
+export type BriefUpdate = Partial<BriefInput>;
+
+function resultOrThrow<T>(data: T | null, error: { message: string } | null): T {
+  if (error) throw new Error(error.message);
+  if (data === null) throw new Error("Supabase returned no data");
+  return data;
 }
 
-export async function createPortfolioProject(
-  creatorId: number,
-  input: PortfolioProjectInput
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [lastProject] = await db
-    .select({ sortOrder: portfolioProjects.sortOrder })
-    .from(portfolioProjects)
-    .where(eq(portfolioProjects.creatorId, creatorId))
-    .orderBy(desc(portfolioProjects.sortOrder))
-    .limit(1);
-  const result = await db.insert(portfolioProjects).values({
-    ...input,
-    creatorId,
-    published: 0,
-    sortOrder: (lastProject?.sortOrder ?? -1) + 1,
-  });
-  const [created] = await db
-    .select()
-    .from(portfolioProjects)
-    .where(
-      and(
-        eq(portfolioProjects.id, Number(result[0].insertId)),
-        eq(portfolioProjects.creatorId, creatorId)
-      )
-    )
-    .limit(1);
-  return created;
-}
-
-export async function updatePortfolioProject(
-  creatorId: number,
-  projectId: number,
-  input: PortfolioProjectUpdate
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [existing] = await db
-    .select({ id: portfolioProjects.id })
-    .from(portfolioProjects)
-    .where(
-      and(
-        eq(portfolioProjects.id, projectId),
-        eq(portfolioProjects.creatorId, creatorId)
-      )
-    )
-    .limit(1);
-  if (!existing) return undefined;
-  await db
-    .update(portfolioProjects)
-    .set(input)
-    .where(
-      and(
-        eq(portfolioProjects.id, projectId),
-        eq(portfolioProjects.creatorId, creatorId)
-      )
-    );
-  const [updated] = await db
-    .select()
-    .from(portfolioProjects)
-    .where(
-      and(
-        eq(portfolioProjects.id, projectId),
-        eq(portfolioProjects.creatorId, creatorId)
-      )
-    )
-    .limit(1);
-  return updated;
-}
-
-export async function deletePortfolioProject(
-  creatorId: number,
-  projectId: number
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const result = await db
-    .delete(portfolioProjects)
-    .where(
-      and(
-        eq(portfolioProjects.id, projectId),
-        eq(portfolioProjects.creatorId, creatorId)
-      )
-    );
-  return Boolean(result[0].affectedRows);
-}
-
-export async function reorderPortfolioProjects(
-  creatorId: number,
-  projectIds: number[]
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const owned = await db
-    .select({ id: portfolioProjects.id })
-    .from(portfolioProjects)
-    .where(eq(portfolioProjects.creatorId, creatorId));
-  const ownedIds = owned.map(project => project.id).sort((a, b) => a - b);
-  const requestedIds = [...projectIds].sort((a, b) => a - b);
-  if (
-    projectIds.length !== new Set(projectIds).size ||
-    ownedIds.length !== requestedIds.length ||
-    ownedIds.some((id, index) => id !== requestedIds[index])
-  )
-    return false;
-  await db.transaction(async tx => {
-    for (const [sortOrder, projectId] of projectIds.entries()) {
-      await tx
-        .update(portfolioProjects)
-        .set({ sortOrder })
-        .where(
-          and(
-            eq(portfolioProjects.id, projectId),
-            eq(portfolioProjects.creatorId, creatorId)
-          )
-        );
-    }
-  });
-  return true;
-}
-
-export async function saveCreatorProfile(
-  userId: number,
-  input: Omit<
-    typeof creatorProfiles.$inferInsert,
-    | "id"
-    | "userId"
-    | "createdAt"
-    | "updatedAt"
-    | "availability"
-    | "verificationStatus"
-  >
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [existing] = await db
-    .select({ id: creatorProfiles.id })
-    .from(creatorProfiles)
-    .where(eq(creatorProfiles.userId, userId))
-    .limit(1);
-  const ownerSuffix = `-${userId}`;
-  const baseSlug = input.slug.endsWith(ownerSuffix)
-    ? input.slug.slice(0, -ownerSuffix.length)
-    : input.slug;
-  const values = {
-    ...input,
-    slug: `${baseSlug.slice(0, 120 - ownerSuffix.length)}${ownerSuffix}`,
-    verificationStatus: "self-reported" as const,
-    availability: "available" as const,
+function mapCreatorProfile(row: CreatorProfileRow): CreatorProfileRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    slug: row.slug,
+    name: row.name,
+    headline: row.headline,
+    bio: row.bio,
+    location: row.location,
+    workMode: row.work_mode,
+    skills: row.skills,
+    tools: row.tools,
+    contentTypes: row.content_types,
+    styles: row.styles,
+    experience: row.experience,
+    rates: row.rates,
+    formats: row.formats,
+    workflow: row.workflow,
+    verificationStatus: row.verification_status,
+    availability: row.availability,
+    published: row.published,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
-  if (existing) {
-    await db
-      .update(creatorProfiles)
-      .set(values)
-      .where(
-        and(
-          eq(creatorProfiles.id, existing.id),
-          eq(creatorProfiles.userId, userId)
-        )
-      );
-  } else {
-    try {
-      await db.insert(creatorProfiles).values({ ...values, userId });
-    } catch (error) {
-      const [racedProfile] = await db
-        .select({ id: creatorProfiles.id })
-        .from(creatorProfiles)
-        .where(eq(creatorProfiles.userId, userId))
-        .limit(1);
-      if (!racedProfile) throw error;
-      await db
-        .update(creatorProfiles)
-        .set(values)
-        .where(
-          and(
-            eq(creatorProfiles.id, racedProfile.id),
-            eq(creatorProfiles.userId, userId)
-          )
-        );
-    }
-  }
-  return getCreatorProfileForUser(userId);
 }
 
-export async function getBrandProfile(userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const [brand] = await db
-    .select()
-    .from(brandProfiles)
-    .where(eq(brandProfiles.userId, userId))
-    .limit(1);
-  return brand;
+function mapProject(row: PortfolioProjectRow, imageUrl: string | null = null): PortfolioProjectRecord {
+  return {
+    id: row.id,
+    creatorId: row.creator_id,
+    title: row.title,
+    description: row.description,
+    contentType: row.content_type,
+    tools: row.tools,
+    skills: row.skills,
+    role: row.role,
+    challenge: row.challenge,
+    approach: row.approach,
+    outcomes: row.outcomes,
+    impactSummary: row.impact_summary,
+    mediaPath: row.media_path,
+    mediaName: row.media_name,
+    mediaType: row.media_type,
+    mediaSize: row.media_size,
+    imageUrl,
+    isConcept: row.is_concept,
+    published: row.published,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
-export async function listBriefsForBrand(brandId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  return db
-    .select()
-    .from(briefs)
-    .where(eq(briefs.brandId, brandId))
-    .orderBy(desc(briefs.updatedAt));
+function mapBrief(row: BriefRow): BriefRecord {
+  return {
+    id: row.id,
+    brandId: row.brand_id,
+    title: row.title,
+    objective: row.objective,
+    contentType: row.content_type,
+    style: row.style,
+    audience: row.audience,
+    platform: row.platform,
+    duration: row.duration,
+    aspectRatio: row.aspect_ratio,
+    deliverables: row.deliverables,
+    budget: row.budget,
+    deadline: row.deadline,
+    location: row.location,
+    workMode: row.work_mode,
+    licensing: row.licensing,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
-export async function listPublishedBriefs() {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  return db
-    .select()
-    .from(briefs)
-    .where(eq(briefs.status, "published"))
-    .orderBy(desc(briefs.updatedAt));
-}
-
-export async function createBrief(
-  brandId: number,
-  input: Omit<
-    typeof briefs.$inferInsert,
-    "id" | "brandId" | "createdAt" | "updatedAt"
-  >
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const result = await db.insert(briefs).values({ ...input, brandId });
-  const [created] = await db
-    .select()
-    .from(briefs)
-    .where(
-      and(
-        eq(briefs.id, Number(result[0].insertId)),
-        eq(briefs.brandId, brandId)
-      )
-    )
-    .limit(1);
-  return created;
-}
-
-export type BriefUpdate = Partial<
-  Omit<typeof briefs.$inferInsert, "id" | "brandId" | "createdAt" | "updatedAt">
->;
-
-export function isValidBriefStatusTransition(
-  current: "draft" | "published" | "closed",
-  next: "draft" | "published" | "closed"
-) {
-  return (
-    current === next ||
-    (current === "draft" && next === "published") ||
-    (current === "published" && (next === "draft" || next === "closed"))
+async function signProjectMedia(client: RequestSupabase, rows: PortfolioProjectRow[]) {
+  return Promise.all(
+    rows.map(async row => {
+      let imageUrl: string | null = null;
+      if (row.media_path) {
+        const { data, error } = await client.storage
+          .from("portfolio-media")
+          .createSignedUrl(row.media_path, 3600);
+        if (!error) imageUrl = data.signedUrl;
+      }
+      return mapProject(row, imageUrl);
+    })
   );
 }
 
+export async function getAccountProfile(client: RequestSupabase, userId: string) {
+  const { data, error } = await client
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as ProfileRow;
+}
+
+export async function updateAccountType(
+  client: RequestSupabase,
+  userId: string,
+  accountType: AccountType
+) {
+  const { data, error } = await client
+    .from("profiles")
+    .update({ account_type: accountType })
+    .eq("id", userId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as ProfileRow;
+}
+
+export async function listCreators(client?: RequestSupabase) {
+  const supabase = client || createSupabaseClient();
+  const { data, error } = await supabase
+    .from("creator_profiles")
+    .select("*")
+    .eq("published", true)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map(row => mapCreatorProfile(row as CreatorProfileRow));
+}
+
+export async function getCreatorById(client: RequestSupabase, id: number) {
+  const { data: profileData, error: profileError } = await client
+    .from("creator_profiles")
+    .select("*")
+    .eq("id", id)
+    .eq("published", true)
+    .maybeSingle();
+  if (profileError) throw new Error(profileError.message);
+  if (!profileData) return undefined;
+  const { data: projectData, error: projectError } = await client
+    .from("portfolio_projects")
+    .select("*")
+    .eq("creator_id", id)
+    .eq("published", true)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: false });
+  if (projectError) throw new Error(projectError.message);
+  return {
+    profile: mapCreatorProfile(profileData as CreatorProfileRow),
+    projects: await signProjectMedia(client, (projectData || []) as PortfolioProjectRow[]),
+  };
+}
+
+export async function getCreatorProfileForUser(client: RequestSupabase, userId: string) {
+  const { data: profileData, error: profileError } = await client
+    .from("creator_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (profileError) throw new Error(profileError.message);
+  if (!profileData) return undefined;
+  const { data: projectData, error: projectError } = await client
+    .from("portfolio_projects")
+    .select("*")
+    .eq("creator_id", profileData.id)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: false });
+  if (projectError) throw new Error(projectError.message);
+  return {
+    profile: mapCreatorProfile(profileData as CreatorProfileRow),
+    projects: await signProjectMedia(client, (projectData || []) as PortfolioProjectRow[]),
+  };
+}
+
+export async function getCreatorProfileIdForUser(client: RequestSupabase, userId: string) {
+  const { data, error } = await client
+    .from("creator_profiles")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.id;
+}
+
+export async function saveCreatorProfile(
+  client: RequestSupabase,
+  userId: string,
+  input: CreatorProfileInput
+) {
+  const { data, error } = await client
+    .from("creator_profiles")
+    .upsert(
+      {
+        user_id: userId,
+        slug: input.slug,
+        name: input.name,
+        headline: input.headline,
+        bio: input.bio,
+        location: input.location,
+        work_mode: input.workMode,
+        skills: input.skills,
+        tools: input.tools,
+        content_types: input.contentTypes,
+        styles: input.styles,
+        experience: input.experience,
+        rates: input.rates,
+        formats: input.formats,
+        workflow: input.workflow,
+        published: input.published,
+      },
+      { onConflict: "user_id" }
+    )
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return getCreatorProfileForUser(client, userId).then(profile => {
+    if (!profile) throw new Error("Creator profile was not available after saving");
+    return profile;
+  });
+}
+
+export async function listBriefsForBrand(client: RequestSupabase, brandId: string) {
+  const { data, error } = await client
+    .from("briefs")
+    .select("*")
+    .eq("brand_id", brandId)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map(row => mapBrief(row as BriefRow));
+}
+
+export async function listPublishedBriefs(client?: RequestSupabase) {
+  const supabase = client || createSupabaseClient();
+  const { data, error } = await supabase
+    .from("briefs")
+    .select("*")
+    .eq("status", "published")
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map(row => mapBrief(row as BriefRow));
+}
+
+export async function createBrief(client: RequestSupabase, brandId: string, input: BriefInput) {
+  const { data, error } = await client
+    .from("briefs")
+    .insert({
+      brand_id: brandId,
+      title: input.title,
+      objective: input.objective,
+      content_type: input.contentType,
+      style: input.style,
+      audience: input.audience,
+      platform: input.platform,
+      duration: input.duration,
+      aspect_ratio: input.aspectRatio,
+      deliverables: input.deliverables,
+      budget: input.budget,
+      deadline: input.deadline,
+      location: input.location,
+      work_mode: input.workMode,
+      licensing: input.licensing,
+      status: input.status,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return mapBrief(data as BriefRow);
+}
+
+export function isValidBriefStatusTransition(current: BriefStatus, next: BriefStatus) {
+  return current === next ||
+    (current === "draft" && next === "published") ||
+    (current === "published" && (next === "draft" || next === "closed"));
+}
+
+const briefFieldMap: Record<keyof BriefUpdate, string> = {
+  title: "title",
+  objective: "objective",
+  contentType: "content_type",
+  style: "style",
+  audience: "audience",
+  platform: "platform",
+  duration: "duration",
+  aspectRatio: "aspect_ratio",
+  deliverables: "deliverables",
+  budget: "budget",
+  deadline: "deadline",
+  location: "location",
+  workMode: "work_mode",
+  licensing: "licensing",
+  status: "status",
+};
+
 export async function updateBriefForBrand(
-  brandId: number,
+  client: RequestSupabase,
+  brandId: string,
   briefId: number,
   input: BriefUpdate
 ) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [current] = await db
-    .select()
-    .from(briefs)
-    .where(and(eq(briefs.id, briefId), eq(briefs.brandId, brandId)))
-    .limit(1);
-  if (!current) return { kind: "not-found" as const };
-  if (
-    input.status &&
-    !isValidBriefStatusTransition(current.status, input.status)
-  )
+  const { data: currentData, error: currentError } = await client
+    .from("briefs")
+    .select("*")
+    .eq("id", briefId)
+    .eq("brand_id", brandId)
+    .maybeSingle();
+  if (currentError) throw new Error(currentError.message);
+  if (!currentData) return { kind: "not-found" as const };
+  const current = currentData as BriefRow;
+  if (input.status && !isValidBriefStatusTransition(current.status, input.status))
     return { kind: "invalid-transition" as const };
-  const result = await db
-    .update(briefs)
-    .set(input)
-    .where(
-      and(
-        eq(briefs.id, briefId),
-        eq(briefs.brandId, brandId),
-        eq(briefs.status, current.status)
-      )
-    );
-  if (
-    input.status &&
-    input.status !== current.status &&
-    !result[0].affectedRows
-  )
-    return { kind: "invalid-transition" as const };
-  const [updated] = await db
-    .select()
-    .from(briefs)
-    .where(and(eq(briefs.id, briefId), eq(briefs.brandId, brandId)))
-    .limit(1);
-  return updated
-    ? { kind: "updated" as const, brief: updated }
+  const changes: Partial<BriefRow> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const field = briefFieldMap[key as keyof BriefUpdate] as keyof BriefRow;
+    (changes as Record<string, unknown>)[field] = value;
+  }
+  const { data, error } = await client
+    .from("briefs")
+    .update(changes)
+    .eq("id", briefId)
+    .eq("brand_id", brandId)
+    .select("*")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "23514") return { kind: "invalid-transition" as const };
+    throw new Error(error.message);
+  }
+  return data
+    ? { kind: "updated" as const, brief: mapBrief(data as BriefRow) }
     : { kind: "not-found" as const };
 }
 
-export async function saveCreator(brandId: number, creatorId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [creator] = await db
-    .select({ id: creatorProfiles.id })
-    .from(creatorProfiles)
-    .where(
-      and(eq(creatorProfiles.id, creatorId), eq(creatorProfiles.published, 1))
-    )
-    .limit(1);
+export async function saveCreator(client: RequestSupabase, brandId: string, creatorId: number) {
+  const { data: creator, error: creatorError } = await client
+    .from("creator_profiles")
+    .select("id")
+    .eq("id", creatorId)
+    .eq("published", true)
+    .maybeSingle();
+  if (creatorError) throw new Error(creatorError.message);
   if (!creator) return undefined;
-  const existing = await db
-    .select()
-    .from(savedCreators)
-    .where(
-      and(
-        eq(savedCreators.brandId, brandId),
-        eq(savedCreators.creatorId, creatorId)
-      )
-    )
-    .limit(1);
-  if (existing[0]) return existing[0];
-  await db
-    .insert(savedCreators)
-    .values({ brandId, creatorId })
-    .onDuplicateKeyUpdate({ set: { creatorId } });
-  const [saved] = await db
-    .select()
-    .from(savedCreators)
-    .where(
-      and(
-        eq(savedCreators.brandId, brandId),
-        eq(savedCreators.creatorId, creatorId)
-      )
-    )
-    .limit(1);
-  return saved;
+  const { data, error } = await client
+    .from("saved_creators")
+    .insert({ brand_id: brandId, creator_id: creatorId })
+    .select("*")
+    .single();
+  if (error?.code === "23505") {
+    const { data: existing, error: existingError } = await client
+      .from("saved_creators")
+      .select("*")
+      .eq("brand_id", brandId)
+      .eq("creator_id", creatorId)
+      .single();
+    if (existingError) throw new Error(existingError.message);
+    return existing as SavedCreatorRow;
+  }
+  if (error) throw new Error(error.message);
+  return data as SavedCreatorRow;
 }
 
-export async function listSavedCreators(brandId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  return db
-    .select({ savedId: savedCreators.id, profile: creatorProfiles })
-    .from(savedCreators)
-    .innerJoin(creatorProfiles, eq(savedCreators.creatorId, creatorProfiles.id))
-    .where(
-      and(eq(savedCreators.brandId, brandId), eq(creatorProfiles.published, 1))
-    )
-    .orderBy(desc(savedCreators.createdAt));
+export async function listSavedCreators(client: RequestSupabase, brandId: string) {
+  const { data, error } = await client
+    .from("saved_creators")
+    .select("*")
+    .eq("brand_id", brandId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  const saved = (data || []) as SavedCreatorRow[];
+  if (saved.length === 0) return [];
+  const creatorIds = saved.map(row => row.creator_id);
+  const { data: profiles, error: profilesError } = await client
+    .from("creator_profiles")
+    .select("*")
+    .in("id", creatorIds)
+    .eq("published", true);
+  if (profilesError) throw new Error(profilesError.message);
+  const profileById = new Map((profiles || []).map(row => [row.id, mapCreatorProfile(row as CreatorProfileRow)]));
+  return saved.flatMap(row => {
+    const profile = profileById.get(row.creator_id);
+    return profile ? [{ savedId: row.id, profile }] : [];
+  });
 }
 
-export async function removeSavedCreator(brandId: number, creatorId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  await db
-    .delete(savedCreators)
-    .where(
-      and(
-        eq(savedCreators.brandId, brandId),
-        eq(savedCreators.creatorId, creatorId)
-      )
-    );
+export async function removeSavedCreator(client: RequestSupabase, brandId: string, creatorId: number) {
+  const { error } = await client
+    .from("saved_creators")
+    .delete()
+    .eq("brand_id", brandId)
+    .eq("creator_id", creatorId);
+  if (error) throw new Error(error.message);
   return { success: true } as const;
 }
 
 export async function listCollaborationsForUser(
-  userId: number,
-  accountType: "creator" | "brand" | "admin"
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
+  client: RequestSupabase,
+  userId: string,
+  accountType: AccountType
+): Promise<CollaborationRecord[]> {
+  let query = client.from("collaboration_requests").select("*").order("created_at", { ascending: false });
   if (accountType === "brand") {
-    return db
-      .select({
-        request: collaborationRequests,
-        briefTitle: briefs.title,
-        creatorName: creatorProfiles.name,
-      })
-      .from(collaborationRequests)
-      .innerJoin(briefs, eq(collaborationRequests.briefId, briefs.id))
-      .innerJoin(
-        creatorProfiles,
-        eq(collaborationRequests.creatorId, creatorProfiles.id)
-      )
-      .where(eq(collaborationRequests.brandId, userId))
-      .orderBy(desc(collaborationRequests.createdAt));
+    query = query.eq("brand_id", userId);
+  } else {
+    const creatorId = await getCreatorProfileIdForUser(client, userId);
+    if (!creatorId) return [];
+    query = query.eq("creator_id", creatorId);
   }
-  if (accountType === "creator") {
-    return db
-      .select({
-        request: collaborationRequests,
-        briefTitle: briefs.title,
-        creatorName: creatorProfiles.name,
-        brandName: users.name,
-      })
-      .from(collaborationRequests)
-      .innerJoin(briefs, eq(collaborationRequests.briefId, briefs.id))
-      .innerJoin(
-        creatorProfiles,
-        eq(collaborationRequests.creatorId, creatorProfiles.id)
-      )
-      .innerJoin(users, eq(collaborationRequests.brandId, users.id))
-      .where(eq(creatorProfiles.userId, userId))
-      .orderBy(desc(collaborationRequests.createdAt));
-  }
-  return [];
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  const requests = (data || []) as CollaborationRequestRow[];
+  if (requests.length === 0) return [];
+  const briefIds = [...new Set(requests.map(row => row.brief_id))];
+  const creatorIds = [...new Set(requests.map(row => row.creator_id))];
+  const brandIds = [...new Set(requests.map(row => row.brand_id))];
+  const [briefsResult, creatorsResult, brandsResult] = await Promise.all([
+    client.from("briefs").select("id,title").in("id", briefIds),
+    client.from("creator_profiles").select("id,name").in("id", creatorIds),
+    client.from("profiles").select("id,display_name").in("id", brandIds),
+  ]);
+  if (briefsResult.error) throw new Error(briefsResult.error.message);
+  if (creatorsResult.error) throw new Error(creatorsResult.error.message);
+  if (brandsResult.error) throw new Error(brandsResult.error.message);
+  const briefNames = new Map((briefsResult.data || []).map(row => [row.id, row.title]));
+  const creatorNames = new Map((creatorsResult.data || []).map(row => [row.id, row.name]));
+  const brandNames = new Map((brandsResult.data || []).map(row => [row.id, row.display_name]));
+  return requests.map(row => ({
+    request: {
+      id: row.id,
+      briefId: row.brief_id,
+      brandId: row.brand_id,
+      creatorId: row.creator_id,
+      message: row.message,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    },
+    briefTitle: briefNames.get(row.brief_id) || "Brief unavailable",
+    creatorName: creatorNames.get(row.creator_id),
+    brandName: brandNames.get(row.brand_id),
+  }));
 }
 
 export async function updateCollaborationStatus(
-  userId: number,
+  client: RequestSupabase,
+  userId: string,
   requestId: number,
   status: "accepted" | "declined"
 ) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [current] = await db
-    .select({
-      id: collaborationRequests.id,
-      status: collaborationRequests.status,
-    })
-    .from(collaborationRequests)
-    .innerJoin(
-      creatorProfiles,
-      eq(collaborationRequests.creatorId, creatorProfiles.id)
-    )
-    .where(
-      and(
-        eq(collaborationRequests.id, requestId),
-        eq(creatorProfiles.userId, userId)
-      )
-    )
-    .limit(1);
+  const creatorId = await getCreatorProfileIdForUser(client, userId);
+  if (!creatorId) return { kind: "not-found" as const };
+  const { data: current, error: currentError } = await client
+    .from("collaboration_requests")
+    .select("id,status")
+    .eq("id", requestId)
+    .eq("creator_id", creatorId)
+    .maybeSingle();
+  if (currentError) throw new Error(currentError.message);
   if (!current) return { kind: "not-found" as const };
   if (current.status !== "sent") return { kind: "invalid-transition" as const };
-  const result = await db
-    .update(collaborationRequests)
-    .set({ status })
-    .where(
-      and(
-        eq(collaborationRequests.id, requestId),
-        eq(collaborationRequests.status, "sent")
-      )
-    );
-  if (!result[0].affectedRows) return { kind: "invalid-transition" as const };
-  return { kind: "updated" as const };
+  const { data, error } = await client
+    .from("collaboration_requests")
+    .update({ status })
+    .eq("id", requestId)
+    .eq("creator_id", creatorId)
+    .eq("status", "sent")
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "23514") return { kind: "invalid-transition" as const };
+    throw new Error(error.message);
+  }
+  return data ? { kind: "updated" as const } : { kind: "invalid-transition" as const };
 }
 
 export async function canCreateCollaboration(
+  client: RequestSupabase,
   briefId: number,
-  brandId: number,
+  brandId: string,
   creatorId: number
 ) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const [brief] = await db
-    .select({ id: briefs.id })
-    .from(briefs)
-    .where(
-      and(
-        eq(briefs.id, briefId),
-        eq(briefs.brandId, brandId),
-        eq(briefs.status, "published")
-      )
-    )
-    .limit(1);
-  if (!brief) return false;
-  const [creator] = await db
-    .select({ id: creatorProfiles.id })
-    .from(creatorProfiles)
-    .where(
-      and(eq(creatorProfiles.id, creatorId), eq(creatorProfiles.published, 1))
-    )
-    .limit(1);
-  return Boolean(creator);
+  const [{ data: brief, error: briefError }, { data: creator, error: creatorError }] = await Promise.all([
+    client.from("briefs").select("id").eq("id", briefId).eq("brand_id", brandId).eq("status", "published").maybeSingle(),
+    client.from("creator_profiles").select("id").eq("id", creatorId).eq("published", true).maybeSingle(),
+  ]);
+  if (briefError) throw new Error(briefError.message);
+  if (creatorError) throw new Error(creatorError.message);
+  return Boolean(brief && creator);
 }
 
 export async function createCollaboration(
-  input: typeof collaborationRequests.$inferInsert
+  client: RequestSupabase,
+  input: Pick<CollaborationRequestRow, "brief_id" | "brand_id" | "creator_id" | "message">
 ) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const result = await db.insert(collaborationRequests).values(input);
-  return { id: Number(result[0].insertId), ...input };
+  const { data, error } = await client
+    .from("collaboration_requests")
+    .insert({ ...input, status: "sent" })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as CollaborationRequestRow;
+}
+
+export async function createPortfolioProject(
+  client: RequestSupabase,
+  creatorId: number,
+  input: Omit<PortfolioProjectRow, "id" | "creator_id" | "created_at" | "updated_at" | "sort_order" | "published">
+) {
+  const { data: last, error: lastError } = await client
+    .from("portfolio_projects")
+    .select("sort_order")
+    .eq("creator_id", creatorId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastError) throw new Error(lastError.message);
+  const { data, error } = await client
+    .from("portfolio_projects")
+    .insert({ ...input, creator_id: creatorId, published: false, sort_order: (last?.sort_order ?? -1) + 1 })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return mapProject(data as PortfolioProjectRow);
+}
+
+export async function listPortfolioProjects(client: RequestSupabase, creatorId: number) {
+  const { data, error } = await client
+    .from("portfolio_projects")
+    .select("*")
+    .eq("creator_id", creatorId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return signProjectMedia(client, (data || []) as PortfolioProjectRow[]);
+}
+
+const projectFieldMap: Record<string, string> = {
+  contentType: "content_type",
+  impactSummary: "impact_summary",
+  mediaPath: "media_path",
+  mediaName: "media_name",
+  mediaType: "media_type",
+  mediaSize: "media_size",
+  isConcept: "is_concept",
+  sortOrder: "sort_order",
+};
+
+export async function updatePortfolioProject(
+  client: RequestSupabase,
+  creatorId: number,
+  projectId: number,
+  input: Record<string, unknown>
+) {
+  const { data, error } = await client
+    .from("portfolio_projects")
+    .update(Object.fromEntries(Object.entries(input).map(([key, value]) => [projectFieldMap[key] || key, value])) as Partial<PortfolioProjectRow>)
+    .eq("id", projectId)
+    .eq("creator_id", creatorId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapProject(data as PortfolioProjectRow) : undefined;
+}
+
+export async function deletePortfolioProject(client: RequestSupabase, creatorId: number, projectId: number) {
+  const { data, error } = await client
+    .from("portfolio_projects")
+    .delete()
+    .eq("id", projectId)
+    .eq("creator_id", creatorId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data);
+}
+
+export async function reorderPortfolioProjects(client: RequestSupabase, _creatorId: number, projectIds: number[]) {
+  const { data, error } = await client.rpc("reorder_portfolio_projects", { project_ids: projectIds });
+  if (error) throw new Error(error.message);
+  return data;
 }

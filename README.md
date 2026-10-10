@@ -1,18 +1,13 @@
 # FrameFoundry — AI Creator Marketplace
 
-React / Express / tRPC / Drizzle starter, adapted from the Sandbox web-db-user template.
+FrameFoundry is a React / TypeScript / Vite / Express / tRPC marketplace backed by Supabase Auth, PostgreSQL with Row Level Security, and Supabase Storage.
 
-- `pnpm dev`: development server; honors `PORT` (default 3000).
+- `pnpm dev`: run the full app on port 3000.
+- `pnpm check`: TypeScript validation.
+- `pnpm test`: unit, mocked Supabase, and router tests.
 - `pnpm build` / `pnpm start`: build and serve `dist/index.js` and `dist/public/`.
-- `pnpm db:migrate`: apply checked-in migrations. `pnpm db:push`: generate and apply new schema changes.
-- `pnpm check` / `pnpm test`: types and application tests.
+- `pnpm supabase:start`, `pnpm supabase:reset`, `pnpm supabase:test`: run local Supabase, apply migrations to the local stack, and run pgTAP policy tests. Docker and the Supabase CLI are required.
 
-Authenticated creator profiles, brand-owned briefs, saved creators, and collaboration requests persist in MySQL through owner-scoped tRPC procedures. Read [SETUP.md](SETUP.md) before applying migrations to an existing database; migration `0002_wide_sphinx` adds uniqueness constraints and requires duplicate-data preflight checks.
+Supabase is the only active database backend. Review [SETUP.md](SETUP.md) for local development, Auth redirects, Storage policies, deployments, migrations, and the explicit legacy MySQL export/import plan. Existing Drizzle/MySQL SQL under `drizzle/` is archived reference only and is not used by the app or migration scripts.
 
-Creator Portfolio Studio adds owner-scoped case-study projects and optional Forge-backed AI suggestions and media uploads. Those integrations require server-side `MANUS_API_URL` and `MANUS_API_KEY`; without them the Studio reports the unavailable state and retains manual project editing. Migration `0003_sleepy_may_parker` keeps existing projects private until each is reviewed and published. See [SETUP.md](SETUP.md) before applying it.
-
-Start with the Webdev skill's default-template guide. Platform login, storage, payments and service contracts live in its shared references; read the relevant capability before extending its helper.
-
-`server/_core/publicConfig.ts` exposes only named public runtime values. Private keys stay server-side. The platform serves managed `/manus-storage/` assets; the application does not register a second proxy.
-
-Platform configuration is readable and editable through `webdev.config`. Default settings are initial values, not enforced constraints. The agent may modify the files, commands and configuration or follow the flexible guide for another stack.
+Portfolio AI is optional and provider-neutral; no provider credentials or implementation are included. Without one, manual Portfolio Studio editing remains available. Supabase Auth identifies real users; demo roles and sample data remain local and are not authenticated marketplace accounts.
