@@ -19,7 +19,6 @@ import {
     LogIn,
     LogOut,
     Menu,
-    Zap,
     type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -474,26 +473,6 @@ export function SideRail({
                         );
                     })}
                 </ul>
-
-                <div className="mt-10 rounded-2xl bg-[var(--navy)] p-4 text-white">
-                    <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--lime)] text-[var(--navy)]">
-                        <Zap size={16} />
-                    </div>
-                    <div className="text-sm font-bold">
-                        {role === "creator" ? "Get discovered." : "Start a brief."}
-                    </div>
-                    <p className="mt-1 text-xs leading-5 text-white/55">
-                        {role === "creator"
-                            ? "Build a profile that gives the right people a reason to reach out."
-                            : "Describe the work and shortlist creators who fit."}
-                    </p>
-                    <Link
-                        href={role === "creator" ? "/creator" : "/briefs/new"}
-                        className="focus-ring mt-4 inline-block rounded text-xs font-bold text-[var(--lime)]"
-                    >
-                        {role === "creator" ? "Continue profile →" : "Publish a brief →"}
-                    </Link>
-                </div>
             </nav>
         </aside>
     );
