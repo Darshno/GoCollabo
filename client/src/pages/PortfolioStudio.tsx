@@ -571,7 +571,7 @@ export default function PortfolioStudio() {
         <div className="surface flex items-start gap-3 p-4">
           <Sparkles
             size={17}
-            className="mt-0.5 shrink-0 text-[var(--indigo)]"
+            className="mt-0.5 shrink-0 text-[#0B0D12]"
           />
           <div>
             <div className="text-sm font-bold">AI portfolio assist</div>
@@ -583,7 +583,7 @@ export default function PortfolioStudio() {
           </div>
         </div>
         <div className="surface flex items-start gap-3 p-4">
-          <Upload size={17} className="mt-0.5 shrink-0 text-[var(--indigo)]" />
+          <Upload size={17} className="mt-0.5 shrink-0 text-[#0B0D12]" />
           <div>
             <div className="text-sm font-bold">Managed media storage</div>
             <p className="mt-1 text-xs leading-5 text-[#687087]">
