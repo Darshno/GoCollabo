@@ -147,7 +147,7 @@ type PersistedBrief = {
   status: "draft" | "published" | "closed";
 };
 
-function mapCreator(record: PersistedCreator): Creator {
+export function mapCreator(record: PersistedCreator): Creator {
   const { profile } = record;
   return {
     id: String(profile.id),
@@ -185,7 +185,7 @@ function mapCreator(record: PersistedCreator): Creator {
   };
 }
 
-function mapBrief(brief: PersistedBrief): Brief {
+export function mapBrief(brief: PersistedBrief): Brief {
   return {
     id: String(brief.id),
     title: brief.title,
@@ -210,183 +210,6 @@ function mapBrief(brief: PersistedBrief): Brief {
 const seedCreators: Creator[] = [
   {
     id: "c1",
-    slug: "mara-chen",
-    name: "Mara Chen",
-    headline: "Director + visual systems designer for impossible worlds",
-    location: "Los Angeles, CA",
-    mode: "remote",
-    skills: ["Direction", "Worldbuilding", "Compositing"],
-    tools: ["Runway", "ComfyUI", "After Effects"],
-    types: ["Film", "Brand film", "Editorial"],
-    styles: ["Surreal", "Cinematic", "Textural"],
-    experience: "6–8 years",
-    rates: "$2.5k–$8k / project",
-    formats: ["16:9", "9:16", "1:1"],
-    availability: "Available in November",
-    verification: "SELF-REPORTED",
-    bio: "Mara builds cinematic worlds that feel discovered rather than designed. Her work moves between atmospheric short films, launch films, and visual identity systems for teams working at the edge of culture.",
-    workflow:
-      "A tight concept loop, visual reference pass, then rapid look development before production. Every delivery includes organized source files and a usage note.",
-    projects: [
-      {
-        title: "The Quiet Between",
-        type: "AI short film",
-        image:
-          "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200&q=85",
-        description: "A speculative film about memory, rendered as weather.",
-      },
-      {
-        title: "Solace / 03",
-        type: "Brand world",
-        image:
-          "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200&q=85",
-        description: "Atmospheric launch system for a new ritual object.",
-        concept: true,
-      },
-      {
-        title: "Soft Geometry",
-        type: "Editorial motion",
-        image:
-          "https://images.unsplash.com/photo-1500534623283-312aade485b7?w=1200&q=85",
-        description: "A moving study in light, skin, and architectural rhythm.",
-      },
-    ],
-  },
-  {
-    id: "c2",
-    slug: "noah-williams",
-    name: "Noah Williams",
-    headline: "AI animator making joyful, precise brand motion",
-    location: "London, UK",
-    mode: "hybrid",
-    skills: ["3D animation", "Motion design", "Character"],
-    tools: ["Blender", "Sora", "Cinema 4D"],
-    types: ["Social", "Product film", "Explainer"],
-    styles: ["Playful", "Graphic", "Warm"],
-    experience: "4–6 years",
-    rates: "$1.8k–$5k / project",
-    formats: ["9:16", "1:1", "4:5"],
-    availability: "Open for one project",
-    verification: "SELF-REPORTED",
-    bio: "Noah combines classic motion discipline with generative play. He is especially good at translating a fuzzy product truth into a visual system that can scale across a campaign.",
-    workflow:
-      "Storyboard in frames, prototype movement early, then build a small reusable motion language so every cut feels related.",
-    projects: [
-      {
-        title: "Everyday Future",
-        type: "Product story",
-        image:
-          "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&q=85",
-        description: "A playful product film for a world that is already here.",
-      },
-      {
-        title: "Melt / Move",
-        type: "Motion identity",
-        image:
-          "https://images.unsplash.com/photo-1518640467707-6811f4a6ab73?w=1200&q=85",
-        description: "A warm, elastic visual language for a culture platform.",
-        concept: true,
-      },
-      {
-        title: "Good Objects",
-        type: "Social series",
-        image:
-          "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=1200&q=85",
-        description: "Nine-second stories for objects with a point of view.",
-      },
-    ],
-  },
-  {
-    id: "c3",
-    slug: "aisha-kim",
-    name: "Aisha Kim",
-    headline: "Generative artist for fashion, music, and future-facing culture",
-    location: "Seoul, KR",
-    mode: "remote",
-    skills: ["Image making", "Art direction", "Styleframes"],
-    tools: ["Midjourney", "Krea", "Photoshop"],
-    types: ["Campaign", "Cover art", "Social"],
-    styles: ["Editorial", "Chromatic", "Human"],
-    experience: "3–5 years",
-    rates: "$900–$3k / project",
-    formats: ["4:5", "1:1", "16:9"],
-    availability: "Available now",
-    verification: "SELF-REPORTED",
-    bio: "Aisha makes images that hold attention at thumb speed. Her practice is rooted in fashion image-making but expands into tactile worlds, campaign systems, and album environments.",
-    workflow:
-      "Start with a visual tension, collect a precise reference wall, then create a small set of hero frames before expanding into a family of assets.",
-    projects: [
-      {
-        title: "After the Signal",
-        type: "Fashion campaign",
-        image:
-          "https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=1200&q=85",
-        description:
-          "Chromatic portraiture for a collection built around threshold states.",
-      },
-      {
-        title: "Nite Bloom",
-        type: "Cover world",
-        image:
-          "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200&q=85",
-        description: "A nocturnal visual system for an electronic record.",
-        concept: true,
-      },
-      {
-        title: "Second Skin",
-        type: "Editorial series",
-        image:
-          "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=1200&q=85",
-        description: "A study of body, fabric, and synthetic light.",
-      },
-    ],
-  },
-  {
-    id: "c4",
-    slug: "leo-martins",
-    name: "Leo Martins",
-    headline: "Experimental filmmaker blending documentary texture with AI",
-    location: "São Paulo, BR",
-    mode: "remote",
-    skills: ["Editing", "Documentary", "Sound"],
-    tools: ["DaVinci Resolve", "Runway", "ElevenLabs"],
-    types: ["Film", "Music video", "Documentary"],
-    styles: ["Raw", "Human", "Noir"],
-    experience: "8–10 years",
-    rates: "$3k–$12k / project",
-    formats: ["16:9", "2.39:1", "9:16"],
-    availability: "Waitlist only",
-    verification: "NOT VERIFIED",
-    bio: "Leo works with the friction between a real voice and an impossible image. He brings documentary instincts to synthetic production, keeping emotion before spectacle.",
-    workflow:
-      "Find the real human beat first. Build references around it, then use generative tools only where they give the story a new pressure or texture.",
-    projects: [
-      {
-        title: "The Last Light Club",
-        type: "Short film",
-        image:
-          "https://images.unsplash.com/photo-1519999482648-25049ddd37b1?w=1200&q=85",
-        description: "A nocturne about the people who keep the lights on.",
-      },
-      {
-        title: "Pulses",
-        type: "Music video",
-        image:
-          "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200&q=85",
-        description: "Handheld energy translated into a synthetic night.",
-        concept: true,
-      },
-      {
-        title: "Field Notes",
-        type: "Documentary study",
-        image:
-          "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=85",
-        description: "Fragments from a city learning a new language.",
-      },
-    ],
-  },
-  {
-    id: "c5",
     slug: "ananya-sharma",
     name: "Ananya Sharma",
     headline: "Brand filmmaker and visual storyteller rooted in Indian everyday life",
@@ -430,7 +253,7 @@ const seedCreators: Creator[] = [
     ],
   },
   {
-    id: "c6",
+    id: "c2",
     slug: "arjun-mehta",
     name: "Arjun Mehta",
     headline: "Motion designer translating Indian visual culture into modern brand motion",
@@ -451,30 +274,30 @@ const seedCreators: Creator[] = [
     projects: [
       {
         title: "Stack & Flow",
-        type: "Motion identity",
+        type: "Product animation",
         image:
-          "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=85",
-        description: "A dynamic brand motion system for a Bengaluru-based fintech.",
+          "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200&q=85",
+        description: "Kinetic interface motion for a developer infrastructure brand.",
       },
       {
-        title: "Festival Pack",
-        type: "Social series",
+        title: "Chai / Code",
+        type: "Brand identity motion",
         image:
-          "https://images.unsplash.com/photo-1567521464027-f127ff144326?w=1200&q=85",
-        description: "A festive motion library adaptable across Diwali, Holi, and Eid campaigns.",
+          "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=85",
+        description: "A vibrant motion language bridging Bangalore tech optimism and street tea culture.",
         concept: true,
       },
       {
-        title: "Launch Day",
-        type: "Explainer film",
+        title: "Rhythm of the Street",
+        type: "Social series",
         image:
-          "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&q=85",
-        description: "A sixty-second animated explainer for a SaaS product launch.",
+          "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&q=85",
+        description: "Dynamic typographic experiments inspired by South Indian painted street signs.",
       },
     ],
   },
   {
-    id: "c7",
+    id: "c3",
     slug: "meera-nair",
     name: "Meera Nair",
     headline: "Editorial photographer and AI image-maker for fashion and lifestyle brands",
@@ -482,7 +305,7 @@ const seedCreators: Creator[] = [
     mode: "remote",
     skills: ["Photography", "Image making", "Art direction"],
     tools: ["Midjourney", "Lightroom", "Photoshop"],
-    types: ["Campaign", "Editorial", "Cover art"],
+    types: ["Editorial", "Lookbook", "Campaign"],
     styles: ["Editorial", "Minimal", "Textural"],
     experience: "5–7 years",
     rates: "₹20,000–₹60,000 / project",
@@ -518,7 +341,7 @@ const seedCreators: Creator[] = [
     ],
   },
   {
-    id: "c8",
+    id: "c4",
     slug: "kabir-malhotra",
     name: "Kabir Malhotra",
     headline: "Generative filmmaker and music video director exploring new Indian cinema",
@@ -561,6 +384,182 @@ const seedCreators: Creator[] = [
       },
     ],
   },
+  {
+    id: "c5",
+    slug: "mara-chen",
+    name: "Mara Chen",
+    headline: "Director + visual systems designer for impossible worlds",
+    location: "Los Angeles, CA",
+    mode: "remote",
+    skills: ["Direction", "Worldbuilding", "Compositing"],
+    tools: ["Runway", "ComfyUI", "After Effects"],
+    types: ["Film", "Brand film", "Editorial"],
+    styles: ["Surreal", "Cinematic", "Textural"],
+    experience: "6–8 years",
+    rates: "$2.5k–$8k / project",
+    formats: ["16:9", "9:16", "1:1"],
+    availability: "Available in November",
+    verification: "SELF-REPORTED",
+    bio: "Mara builds cinematic worlds that feel discovered rather than designed. Her work moves between atmospheric short films, launch films, and visual identity systems for teams working at the edge of culture.",
+    workflow:
+      "A tight concept loop, visual reference pass, then rapid look development before production. Every delivery includes organized source files and a usage note.",
+    projects: [
+      {
+        title: "The Quiet Between",
+        type: "AI short film",
+        image:
+          "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200&q=85",
+        description: "A speculative film about memory, rendered as weather.",
+      },
+      {
+        title: "Solace / 03",
+        type: "Brand world",
+        image:
+          "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200&q=85",
+        description: "Atmospheric launch system for a new ritual object.",
+        concept: true,
+      },
+      {
+        title: "Soft Geometry",
+        type: "Editorial motion",
+        image:
+          "https://images.unsplash.com/photo-1500534623283-312aade485b7?w=1200&q=85",
+        description: "A moving study in light, skin, and architectural rhythm.",
+      },
+    ],
+  },
+  {
+    id: "c6",
+    slug: "noah-williams",
+    name: "Noah Williams",
+    headline: "AI animator making joyful, precise brand motion",
+    location: "London, UK",
+    mode: "hybrid",
+    skills: ["3D animation", "Motion design", "Character"],
+    tools: ["Blender", "Sora", "Cinema 4D"],
+    types: ["Social", "Product film", "Explainer"],
+    styles: ["Playful", "Graphic", "Warm"],
+    experience: "4–6 years",
+    rates: "$1.8k–$5k / project",
+    formats: ["9:16", "1:1", "4:5"],
+    availability: "Open for one project",
+    verification: "SELF-REPORTED",
+    bio: "Noah combines classic motion discipline with generative play. He is especially good at translating a fuzzy product truth into a visual system that can scale across a campaign.",
+    workflow:
+      "Storyboard in frames, prototype movement early, then build a small reusable motion language so every cut feels related.",
+    projects: [
+      {
+        title: "Everyday Future",
+        type: "Product story",
+        image:
+          "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&q=85",
+        description: "A playful product film for a world that is already here.",
+      },
+      {
+        title: "Melt / Move",
+        type: "Motion identity",
+        image:
+          "https://images.unsplash.com/photo-1518640467707-6811f4a6ab73?w=1200&q=85",
+        description: "A warm, elastic visual language for a culture platform.",
+        concept: true,
+      },
+      {
+        title: "Good Objects",
+        type: "Social series",
+        image:
+          "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=1200&q=85",
+        description: "Nine-second stories for objects with a point of view.",
+      },
+    ],
+  },
+  {
+    id: "c7",
+    slug: "aisha-diallo",
+    name: "Aisha Diallo",
+    headline: "Fashion + editorial image-maker for culture platforms",
+    location: "Paris, France",
+    mode: "remote",
+    skills: ["Art direction", "Fashion", "Concept"],
+    tools: ["Midjourney", "Magnific", "Photoshop"],
+    types: ["Editorial", "Campaign", "Lookbook"],
+    styles: ["Editorial", "Chromatic", "Human"],
+    experience: "3–5 years",
+    rates: "$900–$3k / project",
+    formats: ["4:5", "1:1", "16:9"],
+    availability: "Available now",
+    verification: "SELF-REPORTED",
+    bio: "Aisha makes images that hold attention at thumb speed. Her practice is rooted in fashion image-making but expands into tactile worlds, campaign systems, and album environments.",
+    workflow:
+      "Start with a visual tension, collect a precise reference wall, then create a small set of hero frames before expanding into a family of assets.",
+    projects: [
+      {
+        title: "Threshold / Spring",
+        type: "Editorial series",
+        image:
+          "https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=1200&q=85",
+        description:
+          "Chromatic portraiture for a collection built around threshold states.",
+      },
+      {
+        title: "Nite Bloom",
+        type: "Cover world",
+        image:
+          "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200&q=85",
+        description: "A nocturnal visual system for an electronic record.",
+        concept: true,
+      },
+      {
+        title: "Glass House",
+        type: "Campaign stills",
+        image:
+          "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1200&q=85",
+        description: "Quiet fashion frames exploring stillness and synthetic glass.",
+      },
+    ],
+  },
+  {
+    id: "c8",
+    slug: "leo-vance",
+    name: "Leo Vance",
+    headline: "Documentary-adjacent AI filmmaker exploring urban futures",
+    location: "New York, NY",
+    mode: "remote",
+    skills: ["Direction", "Documentary", "Sound"],
+    tools: ["Runway", "ElevenLabs", "Premiere Pro"],
+    types: ["Film", "Documentary", "Music video"],
+    styles: ["Raw", "Human", "Noir"],
+    experience: "8–10 years",
+    rates: "$3k–$12k / project",
+    formats: ["16:9", "2.39:1", "9:16"],
+    availability: "Waitlist only",
+    verification: "NOT VERIFIED",
+    bio: "Leo works with the friction between a real voice and an impossible image. He brings documentary instincts to synthetic production, keeping emotion before spectacle.",
+    workflow:
+      "Find the real human beat first. Build references around it, then use generative tools only where they give the story a new pressure or texture.",
+    projects: [
+      {
+        title: "Night Shift",
+        type: "Short film",
+        image:
+          "https://images.unsplash.com/photo-1519999482648-25049ddd37b1?w=1200&q=85",
+        description: "A nocturne about the people who keep the lights on.",
+      },
+      {
+        title: "Pulses",
+        type: "Music video",
+        image:
+          "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&q=85",
+        description: "A dense, polyrhythmic film about club architecture.",
+      },
+      {
+        title: "Field Notes",
+        type: "Documentary study",
+        image:
+          "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=85",
+        description: "Fragments from a city learning a new language.",
+      },
+    ],
+  },
 ];
 
 const seedBriefs: Brief[] = [
@@ -590,15 +589,26 @@ const seedBriefs: Brief[] = [
   },
 ];
 
-const key = "framefoundry-demo-v1";
+const key = "framefoundry-demo-v2";
 function loadState() {
   try {
-    return JSON.parse(localStorage.getItem(key) || "{}");
+    const raw = localStorage.getItem(key) || localStorage.getItem("framefoundry-demo-v1");
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    // Evict old cache if it does not start with INR creators
+    if (parsed.creators && (!parsed.creators[0]?.rates?.includes("₹") || parsed.creators[0]?.name === "Mara Chen")) {
+      delete parsed.creators;
+      delete parsed.briefs;
+      try {
+        localStorage.removeItem("framefoundry-demo-v1");
+      } catch {}
+    }
+    return parsed;
   } catch {
     return {};
   }
 }
-function split(value: string) {
+export function split(value: string) {
   return value
     .split(",")
     .map(v => v.trim())
