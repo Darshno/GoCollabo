@@ -35,6 +35,17 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { systemRouter } from "./_core/systemRouter";
 import type { TrpcContext } from "./_core/context";
 import { resolvePortfolioAiProvider } from "./portfolio-ai";
+import { resolveBriefAiProvider } from "./brief-ai";
+import { resolveCopilotAiProvider } from "./copilot-ai";
+import {
+  getOrCreateProjectForCollaboration,
+  getProjectById,
+  listProjectsForUser,
+  updateProjectTaskStatus,
+  addTasksToProject,
+  submitDeliverable,
+  reviewDeliverable,
+} from "./projects";
 import { createSupabaseClient, hasSupabaseConfig } from "./supabase";
 
 const csv = z.string().max(4000);
@@ -336,12 +347,23 @@ export const appRouter = router({
       .input(z.object({ requestId: z.number().int().positive(), status: z.enum(["accepted", "declined"]) }))
       .mutation(async ({ ctx, input }) => {
         const user = requireAccountType(ctx, "creator");
-        const result = await updateCollaborationStatus(clientFor(ctx), user.id, input.requestId, input.status);
+        const client = clientFor(ctx);
+        const result = await updateCollaborationStatus(client, user.id, input.requestId, input.status);
         if (result.kind === "not-found")
           throw new TRPCError({ code: "NOT_FOUND", message: "Request not found" });
         if (result.kind === "invalid-transition")
           throw new TRPCError({ code: "CONFLICT", message: "Request has already been answered" });
-        return { success: true } as const;
+
+        let projectId = input.requestId;
+        if (input.status === "accepted") {
+          try {
+            const project = await getOrCreateProjectForCollaboration(client, input.requestId, user.id);
+            projectId = project.id;
+          } catch {
+            // Keep acceptance response successful
+          }
+        }
+        return { success: true, projectId } as const;
       }),
   }),
   portfolio: router({
@@ -401,6 +423,176 @@ export const appRouter = router({
         } catch (error: any) {
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message || "Failed to generate AI draft" });
         }
+      }),
+  }),
+  briefs: router({
+    capabilities: protectedProcedure.query(({ ctx }) => {
+      requireAccountType(ctx, "brand");
+      return {
+        aiConfigured: Boolean(resolveBriefAiProvider()),
+      };
+    }),
+    assist: protectedProcedure
+      .input(
+        z
+          .object({
+            idea: z.string().max(12000).optional(),
+            prompt: z.string().max(12000).optional(),
+          })
+          .refine(
+            data =>
+              Boolean(
+                (data.idea && data.idea.trim().length >= 5) ||
+                  (data.prompt && data.prompt.trim().length >= 5)
+              ),
+            {
+              message: "Please enter a campaign idea of at least 5 characters",
+            }
+          )
+      )
+      .mutation(async ({ ctx, input }) => {
+        requireAccountType(ctx, "brand");
+        const provider = resolveBriefAiProvider();
+        if (!provider) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "No brief AI provider is configured. Continue with manual brief creation.",
+          });
+        }
+
+        try {
+          return await provider.generateDraft(input);
+        } catch (error: any) {
+          if (error.message?.includes("rate limit")) {
+            throw new TRPCError({
+              code: "TOO_MANY_REQUESTS",
+              message: error.message,
+            });
+          }
+          if (error.message === "AI returned malformed output") {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "AI returned malformed output",
+            });
+          }
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message || "Failed to generate AI brief draft",
+          });
+        }
+      }),
+  }),
+  projects: router({
+    capabilities: protectedProcedure.query(({ ctx }) => {
+      requireAccountTypeIdentity(ctx);
+      return {
+        aiConfigured: Boolean(resolveCopilotAiProvider()),
+      };
+    }),
+    get: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const user = requireAccountTypeIdentity(ctx);
+        return getProjectById(clientFor(ctx), input.id, user.id);
+      }),
+    list: protectedProcedure
+      .query(({ ctx }) => {
+        const user = requireAccountTypeIdentity(ctx);
+        return listProjectsForUser(user.id);
+      }),
+    updateTask: protectedProcedure
+      .input(z.object({
+        projectId: z.number().int().positive(),
+        taskId: z.string().min(1),
+        status: z.enum(["todo", "in_progress", "done"]),
+      }))
+      .mutation(({ ctx, input }) => {
+        const user = requireAccountTypeIdentity(ctx);
+        return updateProjectTaskStatus(input.projectId, input.taskId, input.status, user.id);
+      }),
+    addTasks: protectedProcedure
+      .input(z.object({
+        projectId: z.number().int().positive(),
+        tasks: z.array(z.object({
+          title: z.string().min(1).max(200),
+          description: z.string().max(1000).optional(),
+          priority: z.enum(["high", "medium", "low"]).optional(),
+          deadline: z.string().max(100).optional(),
+          source: z.enum(["manual", "ai_copilot"]).optional(),
+        })).min(1),
+      }))
+      .mutation(({ ctx, input }) => {
+        const user = requireAccountTypeIdentity(ctx);
+        return addTasksToProject(input.projectId, input.tasks, user.id);
+      }),
+    copilotFeedback: protectedProcedure
+      .input(z.object({
+        projectId: z.number().int().positive(),
+        feedback: z.string().min(5).max(12000),
+        deliverableTitle: z.string().max(200).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const user = requireAccountTypeIdentity(ctx);
+        const project = await getProjectById(clientFor(ctx), input.projectId, user.id);
+        const provider = resolveCopilotAiProvider();
+        if (!provider) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "No AI copilot provider is configured. Continue with manual task creation.",
+          });
+        }
+        try {
+          return await provider.analyzeFeedback({
+            feedback: input.feedback,
+            deliverableTitle: input.deliverableTitle,
+            briefContext: {
+              title: project.title,
+              objective: project.brief.objective,
+              contentType: project.brief.contentType,
+              style: project.brief.style,
+            },
+          });
+        } catch (error: any) {
+          if (error.message?.includes("rate limit")) {
+            throw new TRPCError({
+              code: "TOO_MANY_REQUESTS",
+              message: error.message,
+            });
+          }
+          if (error.message === "AI returned malformed output") {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "AI returned malformed output",
+            });
+          }
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message || "Failed to analyze feedback with AI Copilot",
+          });
+        }
+      }),
+    submitDeliverable: protectedProcedure
+      .input(z.object({
+        projectId: z.number().int().positive(),
+        title: z.string().min(2).max(180),
+        notes: z.string().max(4000).default(""),
+        assetUrl: z.string().max(1000).optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        const user = requireAccountType(ctx, "creator");
+        return submitDeliverable(input.projectId, input, user.id);
+      }),
+    reviewDeliverable: protectedProcedure
+      .input(z.object({
+        projectId: z.number().int().positive(),
+        deliverableId: z.string().min(1),
+        status: z.enum(["approved", "changes_requested"]),
+        feedback: z.string().max(4000).optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        const user = requireAccountType(ctx, "brand");
+        return reviewDeliverable(input.projectId, input.deliverableId, input, user.id);
       }),
   }),
 });

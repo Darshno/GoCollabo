@@ -163,6 +163,12 @@ describe("account type enforcement", () => {
       /Only brand accounts/
     );
     await expect(
+      caller.briefs.assist({ idea: "I need a video for my brand" })
+    ).rejects.toThrow(/Only brand accounts/);
+    await expect(caller.briefs.capabilities()).rejects.toThrow(
+      /Only brand accounts/
+    );
+    await expect(
       caller.marketplace.createBrief({
         title: "A valid brief title",
         objective: "A sufficiently long objective statement.",
@@ -532,6 +538,131 @@ describe("portfolio AI assistance", () => {
       uploadsConfigured: true,
       maxUploadBytes: 8 * 1024 * 1024,
     });
+  });
+});
+
+describe("brief AI assistance", () => {
+  let originalKey: string | undefined;
+
+  beforeEach(() => {
+    originalKey = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+  });
+
+  afterEach(() => {
+    process.env.GEMINI_API_KEY = originalKey;
+    vi.restoreAllMocks();
+  });
+
+  it("requires authentication for brief AI assistance", async () => {
+    const caller = appRouter.createCaller(anonymous());
+    await expect(
+      caller.briefs.assist({
+        idea: "A campaign idea for a new product launch",
+      })
+    ).rejects.toThrow(/Authentication required/);
+  });
+
+  it("reports that no brief AI provider is configured instead of inventing one", async () => {
+    const caller = appRouter.createCaller(brand());
+    await expect(
+      caller.briefs.assist({
+        idea: "A launch video for our sustainable beauty brand.",
+      })
+    ).rejects.toThrow(/No brief AI provider is configured/);
+  });
+
+  it("advertises brief AI as unavailable when GEMINI_API_KEY is missing", async () => {
+    const caller = appRouter.createCaller(brand());
+    await expect(caller.briefs.capabilities()).resolves.toEqual({
+      aiConfigured: false,
+    });
+  });
+
+  it("advertises brief AI as available when GEMINI_API_KEY is present", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    const caller = appRouter.createCaller(brand());
+    await expect(caller.briefs.capabilities()).resolves.toEqual({
+      aiConfigured: true,
+    });
+  });
+
+  it("successfully generates brief draft through briefs.assist when configured", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    const fetchSpy = vi.spyOn(global, "fetch");
+    const mockDraft = {
+      title: "Eco Skincare Launch Video",
+      objective: "Build organic awareness for new sustainable moisturizer.",
+      targetAudience: "Gen Z & Millennials interested in sustainability",
+      contentType: "Launch Video",
+      creativeStyle: "Tactile & luminous",
+      platform: "Instagram & TikTok",
+      aspectRatio: "9:16",
+      duration: "30-60 sec",
+      deliverables: 2,
+      budget: "",
+      deadline: "",
+      workMode: "remote",
+      licensing: "",
+      location: "Remote",
+    };
+
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(mockDraft) }] } }],
+      }),
+    } as Response);
+
+    const caller = appRouter.createCaller(brand());
+    const result = await caller.briefs.assist({
+      idea: "I need a launch video for my sustainable skincare brand.",
+    });
+
+    expect(result.title).toBe("Eco Skincare Launch Video");
+    expect(result.targetAudience).toBe("Gen Z & Millennials interested in sustainability");
+    expect(result.contentType).toBe("Launch Video");
+    expect(result.deliverables).toBe(2);
+    expect(result.budget).toBe("");
+    expect(result.deadline).toBe("");
+    expect(result.licensing).toBe("");
+  });
+
+  it("rejects campaign ideas that are too short", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    const caller = appRouter.createCaller(brand());
+    await expect(caller.briefs.assist({ idea: "too" })).rejects.toThrow();
+  });
+
+  it("handles provider rate limits properly", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    const fetchSpy = vi.spyOn(global, "fetch");
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      statusText: "Too Many Requests",
+    } as Response);
+
+    const caller = appRouter.createCaller(brand());
+    await expect(
+      caller.briefs.assist({ idea: "A brand launch campaign idea" })
+    ).rejects.toThrow(/rate limit exceeded/);
+  });
+
+  it("handles malformed provider responses gracefully", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    const fetchSpy = vi.spyOn(global, "fetch");
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "not-json" }] } }],
+      }),
+    } as Response);
+
+    const caller = appRouter.createCaller(brand());
+    await expect(
+      caller.briefs.assist({ idea: "A brand launch campaign idea" })
+    ).rejects.toThrow(/AI returned malformed output/);
   });
 });
 

@@ -66,6 +66,13 @@ export function workspaceItems(role: NavRole): NavItem[] {
                 match: p => startsWithSegment(p, "/briefs"),
             },
             {
+                id: "projects",
+                label: "Projects",
+                icon: Clapperboard,
+                href: "/projects",
+                match: p => startsWithSegment(p, "/projects"),
+            },
+            {
                 id: "requests",
                 label: "Requests",
                 icon: HeartHandshake,
@@ -107,6 +114,13 @@ export function workspaceItems(role: NavRole): NavItem[] {
             icon: Bookmark,
             href: "/saved",
             match: p => p === "/saved",
+        },
+        {
+            id: "projects",
+            label: "Projects",
+            icon: Clapperboard,
+            href: "/projects",
+            match: p => startsWithSegment(p, "/projects"),
         },
         {
             id: "requests",
