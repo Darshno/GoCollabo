@@ -171,14 +171,14 @@ function Logo() {
     return (
         <Link
             href="/"
-            aria-label="FrameFoundry home"
+            aria-label="GoCollabo home"
             className="focus-ring flex items-center gap-2 rounded-lg text-left"
         >
             <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[var(--navy)] text-[var(--lime)]">
                 <Clapperboard size={16} />
             </span>
             <span className="text-[15px] font-black tracking-[-.04em]">
-                frame<span className="font-normal text-[#687087]">foundry</span>
+                Go<span className="font-normal text-[#687087]">Collabo</span>
             </span>
         </Link>
     );
@@ -379,7 +379,7 @@ export function Topbar({
                         <SheetTitle className="text-base">Menu</SheetTitle>
                         <SheetDescription className="text-xs">
                             {live
-                                ? `Signed in as ${auth.user?.name || auth.user?.email || "FrameFoundry user"}`
+                                ? `Signed in as ${auth.user?.name || auth.user?.email || "GoCollabo user"}`
                                 : "Browsing in demo mode (sample data)"}
                         </SheetDescription>
                     </SheetHeader>

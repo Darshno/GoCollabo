@@ -29,6 +29,7 @@ import {
   Send,
   SlidersHorizontal,
   Sparkles,
+  LogIn,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -749,7 +750,7 @@ function Hero({
             look real.
           </h1>
           <p className="mt-8 max-w-xl text-base leading-7 text-white/60 lg:text-lg">
-            FrameFoundry helps AI creators build the portfolio they actually
+            GoCollabo helps AI creators build the portfolio they actually
             want to be hired for — and gives brands a sharper way to find them.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
@@ -2973,7 +2974,7 @@ export default function Home() {
           {chrome && <Breadcrumbs path={path} role={navRole} />}
           {auth.user && (
             <div className="mx-auto max-w-[1440px] px-5 pt-4 text-xs text-[#8991a2] lg:px-10">
-              Signed in as {auth.user.name || auth.user.email || "FrameFoundry user"}.{" "}
+              Signed in as {auth.user.name || auth.user.email || "GoCollabo user"}.{" "}
               <span className="font-bold text-[var(--indigo)]">Live account</span>
             </div>
           )}
@@ -2993,7 +2994,7 @@ export default function Home() {
       <footer className="border-t border-[var(--line)] px-5 py-8 lg:px-10">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 text-xs text-[#8991a2] mobile-stack">
           <span>
-            © 2026 FrameFoundry. Sample data is clearly marked; profiles are
+            © 2026 GoCollabo. Sample data is clearly marked; profiles are
             self-reported.
           </span>
           <span className="flex items-center gap-2">
