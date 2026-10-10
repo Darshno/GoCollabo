@@ -1,0 +1,2 @@
+ALTER TABLE `creator_profiles` ADD CONSTRAINT `creator_profiles_userId_unique` UNIQUE(`userId`);--> statement-breakpoint
+ALTER TABLE `saved_creators` ADD CONSTRAINT `saved_creators_brand_creator_unique` UNIQUE(`brandId`,`creatorId`);

@@ -4,6 +4,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -22,49 +23,70 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
-export const creatorProfiles = mysqlTable("creator_profiles", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  slug: varchar("slug", { length: 120 }).notNull().unique(),
-  name: varchar("name", { length: 160 }).notNull(),
-  headline: varchar("headline", { length: 220 }).notNull(),
-  bio: text("bio").notNull(),
-  location: varchar("location", { length: 160 }).notNull(),
-  workMode: mysqlEnum("workMode", ["remote", "hybrid", "on-site"]).notNull(),
-  skills: text("skills").notNull(),
-  tools: text("tools").notNull(),
-  contentTypes: text("contentTypes").notNull(),
-  styles: text("styles").notNull(),
-  experience: varchar("experience", { length: 80 }).notNull(),
-  rates: varchar("rates", { length: 120 }),
-  formats: text("formats").notNull(),
-  workflow: text("workflow").notNull(),
-  verificationStatus: mysqlEnum("verificationStatus", [
-    "self-reported",
-    "not-verified",
-  ])
-    .default("self-reported")
-    .notNull(),
-  availability: mysqlEnum("availability", [
-    "available",
-    "selective",
-    "unavailable",
-  ])
-    .default("available")
-    .notNull(),
-  published: int("published").default(0).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const creatorProfiles = mysqlTable(
+  "creator_profiles",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    slug: varchar("slug", { length: 120 }).notNull().unique(),
+    name: varchar("name", { length: 160 }).notNull(),
+    headline: varchar("headline", { length: 220 }).notNull(),
+    bio: text("bio").notNull(),
+    location: varchar("location", { length: 160 }).notNull(),
+    workMode: mysqlEnum("workMode", ["remote", "hybrid", "on-site"]).notNull(),
+    skills: text("skills").notNull(),
+    tools: text("tools").notNull(),
+    contentTypes: text("contentTypes").notNull(),
+    styles: text("styles").notNull(),
+    experience: varchar("experience", { length: 80 }).notNull(),
+    rates: varchar("rates", { length: 120 }),
+    formats: text("formats").notNull(),
+    workflow: text("workflow").notNull(),
+    verificationStatus: mysqlEnum("verificationStatus", [
+      "self-reported",
+      "not-verified",
+    ])
+      .default("self-reported")
+      .notNull(),
+    availability: mysqlEnum("availability", [
+      "available",
+      "selective",
+      "unavailable",
+    ])
+      .default("available")
+      .notNull(),
+    published: int("published").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    userIdUnique: uniqueIndex("creator_profiles_userId_unique").on(
+      table.userId
+    ),
+  })
+);
 
 export const portfolioProjects = mysqlTable("portfolio_projects", {
   id: int("id").autoincrement().primaryKey(),
   creatorId: int("creatorId").notNull(),
   title: varchar("title", { length: 180 }).notNull(),
   description: text("description").notNull(),
-  imageUrl: text("imageUrl").notNull(),
+  imageUrl: text("imageUrl"),
   contentType: varchar("contentType", { length: 80 }).notNull(),
+  tools: text("tools"),
+  skills: text("skills"),
+  role: text("role"),
+  challenge: text("challenge"),
+  approach: text("approach"),
+  outcomes: text("outcomes"),
+  impactSummary: text("impactSummary"),
+  mediaKey: varchar("mediaKey", { length: 500 }),
+  mediaName: varchar("mediaName", { length: 180 }),
+  mediaType: varchar("mediaType", { length: 80 }),
+  mediaSize: int("mediaSize"),
   isConcept: int("isConcept").default(1).notNull(),
+  published: int("published").default(0).notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -102,12 +124,21 @@ export const briefs = mysqlTable("briefs", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
-export const savedCreators = mysqlTable("saved_creators", {
-  id: int("id").autoincrement().primaryKey(),
-  brandId: int("brandId").notNull(),
-  creatorId: int("creatorId").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+export const savedCreators = mysqlTable(
+  "saved_creators",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    brandId: int("brandId").notNull(),
+    creatorId: int("creatorId").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    brandCreatorUnique: uniqueIndex("saved_creators_brand_creator_unique").on(
+      table.brandId,
+      table.creatorId
+    ),
+  })
+);
 
 export const collaborationRequests = mysqlTable("collaboration_requests", {
   id: int("id").autoincrement().primaryKey(),

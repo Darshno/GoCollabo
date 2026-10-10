@@ -3,10 +3,16 @@
     { "path": "/", "title": "FrameFoundry — AI Creator Marketplace" },
     { "path": "/discover", "title": "Discover creators — FrameFoundry" },
     { "path": "/creator", "title": "Creator workspace — FrameFoundry" },
+    {
+      "path": "/creator/portfolio",
+      "title": "Portfolio Studio — FrameFoundry"
+    },
     { "path": "/creator/:id", "title": "Creator portfolio — FrameFoundry" },
     { "path": "/brand", "title": "Brand workspace — FrameFoundry" },
+    { "path": "/saved", "title": "Saved creators — FrameFoundry" },
     { "path": "/briefs", "title": "Creative briefs — FrameFoundry" },
     { "path": "/briefs/new", "title": "Create a brief — FrameFoundry" },
+    { "path": "/briefs/:id/edit", "title": "Edit brief — FrameFoundry" },
     { "path": "/requests", "title": "Collaboration requests — FrameFoundry" },
     { "path": "/404", "title": "Page not found — FrameFoundry" }
   ]

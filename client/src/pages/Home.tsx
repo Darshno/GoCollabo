@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
-import { useMemo, useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowUpRight,
@@ -28,6 +29,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+const PortfolioStudio = lazy(() => import("@/pages/PortfolioStudio"));
+
 type WorkMode = "remote" | "hybrid" | "on-site";
 type Creator = {
   id: string;
@@ -47,12 +50,20 @@ type Creator = {
   verification: string;
   bio: string;
   workflow: string;
+  published?: boolean;
   projects: {
     title: string;
     type: string;
     image: string;
     description: string;
     concept?: boolean;
+    role?: string | null;
+    challenge?: string | null;
+    approach?: string | null;
+    outcomes?: string | null;
+    impactSummary?: string | null;
+    skills?: string | null;
+    tools?: string | null;
   }[];
 };
 type Brief = {
@@ -64,9 +75,131 @@ type Brief = {
   platform: string;
   budget: string;
   deadline: string;
-  status: "draft" | "published";
+  status: "draft" | "published" | "closed";
+  audience?: string;
+  duration?: string;
+  ratio?: string;
+  deliverables?: number;
+  location?: string;
+  mode?: WorkMode;
+  licensing?: string;
   creatorIds: string[];
 };
+type PersistedCreator = {
+  profile: {
+    id: number;
+    slug: string;
+    name: string;
+    headline: string;
+    bio: string;
+    location: string;
+    workMode: WorkMode;
+    skills: string;
+    tools: string;
+    contentTypes: string;
+    styles: string;
+    experience: string;
+    rates: string | null;
+    formats: string;
+    workflow: string;
+    verificationStatus: string;
+    availability: string;
+    published: number;
+  };
+  projects: Array<{
+    id: number;
+    title: string;
+    description: string;
+    imageUrl: string | null;
+    contentType: string;
+    isConcept: number;
+    role: string | null;
+    challenge: string | null;
+    approach: string | null;
+    outcomes: string | null;
+    impactSummary: string | null;
+    skills: string | null;
+    tools: string | null;
+  }>;
+};
+type PersistedBrief = {
+  id: number;
+  title: string;
+  objective: string;
+  contentType: string;
+  style: string;
+  audience: string;
+  platform: string;
+  duration: string;
+  aspectRatio: string;
+  deliverables: number;
+  budget: string;
+  deadline: string;
+  location: string;
+  workMode: WorkMode;
+  licensing: string;
+  status: "draft" | "published" | "closed";
+};
+
+function mapCreator(record: PersistedCreator): Creator {
+  const { profile } = record;
+  return {
+    id: String(profile.id),
+    slug: profile.slug,
+    name: profile.name,
+    headline: profile.headline,
+    location: profile.location,
+    mode: profile.workMode,
+    skills: split(profile.skills),
+    tools: split(profile.tools),
+    types: split(profile.contentTypes),
+    styles: split(profile.styles),
+    experience: profile.experience,
+    rates: profile.rates || "Range not shared",
+    formats: split(profile.formats),
+    availability: profile.availability,
+    verification: profile.verificationStatus.toUpperCase(),
+    bio: profile.bio,
+    workflow: profile.workflow,
+    published: profile.published === 1,
+    projects: record.projects.map(project => ({
+      title: project.title,
+      description: project.description,
+      type: project.contentType,
+      image: project.imageUrl || "",
+      concept: project.isConcept === 1,
+      role: project.role,
+      challenge: project.challenge,
+      approach: project.approach,
+      outcomes: project.outcomes,
+      impactSummary: project.impactSummary,
+      skills: project.skills,
+      tools: project.tools,
+    })),
+  };
+}
+
+function mapBrief(brief: PersistedBrief): Brief {
+  return {
+    id: String(brief.id),
+    title: brief.title,
+    objective: brief.objective,
+    type: brief.contentType,
+    style: brief.style,
+    platform: brief.platform,
+    budget: brief.budget,
+    deadline: brief.deadline,
+    status: brief.status,
+    audience: brief.audience,
+    duration: brief.duration,
+    ratio: brief.aspectRatio,
+    deliverables: brief.deliverables,
+    location: brief.location,
+    mode: brief.workMode,
+    licensing: brief.licensing,
+    creatorIds: [],
+  };
+}
 
 const seedCreators: Creator[] = [
   {
@@ -367,6 +500,18 @@ function Topbar({
   const [, setLocation] = useLocation();
   const auth = useAuth();
   const [open, setOpen] = useState(false);
+  const currentRole = auth.user
+    ? auth.user.accountType === "brand"
+      ? "brand"
+      : "creator"
+    : demoRole;
+  const accountTypeMutation = trpc.auth.setAccountType.useMutation({
+    onSuccess: async ({ accountType }) => {
+      await auth.refresh();
+      toast.success(`Switched to ${accountType} workspace`);
+    },
+    onError: () => toast.error("Could not update account type"),
+  });
   return (
     <header className="nav-shell sticky top-0 z-30">
       <div className="mx-auto flex h-[70px] max-w-[1440px] items-center justify-between px-5 lg:px-10">
@@ -392,18 +537,38 @@ function Topbar({
           </button>
         </nav>
         <div className="flex items-center gap-2">
-          <div className="desktop-only flex items-center gap-1 rounded-full border border-[var(--line)] bg-white p-1 text-[11px]">
-            <span className="px-2 text-[#9299aa]">Demo as</span>
-            {["creator", "brand"].map(role => (
-              <button
-                key={role}
-                onClick={() => setDemoRole(role)}
-                className={`rounded-full px-2.5 py-1.5 font-bold capitalize ${demoRole === role ? "bg-[var(--navy)] text-white" : "text-[#697186]"}`}
+          {auth.user ? (
+            <label className="desktop-only flex items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3 py-1 text-[11px] text-[#9299aa]">
+              Account
+              <select
+                aria-label="Live account type"
+                value={auth.user.accountType === "brand" ? "brand" : "creator"}
+                disabled={accountTypeMutation.isPending}
+                onChange={event =>
+                  accountTypeMutation.mutate({
+                    accountType: event.target.value as "creator" | "brand",
+                  })
+                }
+                className="bg-transparent py-1 font-bold capitalize text-[var(--ink)] outline-none"
               >
-                {role}
-              </button>
-            ))}
-          </div>
+                <option value="creator">Creator</option>
+                <option value="brand">Brand</option>
+              </select>
+            </label>
+          ) : !auth.loading ? (
+            <div className="desktop-only flex items-center gap-1 rounded-full border border-[var(--line)] bg-white p-1 text-[11px]">
+              <span className="px-2 text-[#9299aa]">Demo as</span>
+              {["creator", "brand"].map(role => (
+                <button
+                  key={role}
+                  onClick={() => setDemoRole(role)}
+                  className={`rounded-full px-2.5 py-1.5 font-bold capitalize ${demoRole === role ? "bg-[var(--navy)] text-white" : "text-[#697186]"}`}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {auth.user ? (
             <Button variant="ghost" onClick={() => auth.logout()}>
               Log out
@@ -423,7 +588,7 @@ function Topbar({
             </Button>
           )}
           <button
-            className="hidden rounded-full border border-[var(--line)] p-2.5 md:hidden"
+            className="rounded-full border border-[var(--line)] p-2.5 md:hidden"
             onClick={() => setOpen(!open)}
           >
             <Menu size={18} />
@@ -460,6 +625,71 @@ function Topbar({
             >
               Creator workspace
             </button>
+            {currentRole === "creator" && (
+              <button
+                className="py-2 text-left"
+                onClick={() => {
+                  setLocation("/creator/portfolio");
+                  setOpen(false);
+                }}
+              >
+                Portfolio Studio
+              </button>
+            )}
+            <button
+              className="py-2 text-left"
+              onClick={() => {
+                setLocation("/requests");
+                setOpen(false);
+              }}
+            >
+              Collaboration requests
+            </button>
+            {auth.user ? (
+              <label className="flex items-center justify-between py-2 text-left">
+                Live account type
+                <select
+                  aria-label="Live account type"
+                  value={
+                    auth.user.accountType === "brand" ? "brand" : "creator"
+                  }
+                  disabled={accountTypeMutation.isPending}
+                  onChange={event =>
+                    accountTypeMutation.mutate({
+                      accountType: event.target.value as "creator" | "brand",
+                    })
+                  }
+                  className="rounded-lg border border-[var(--line)] bg-white px-2 py-1"
+                >
+                  <option value="creator">Creator</option>
+                  <option value="brand">Brand</option>
+                </select>
+              </label>
+            ) : (
+              <label className="flex items-center justify-between py-2 text-left">
+                Demo role
+                <select
+                  aria-label="Demo role"
+                  value={demoRole}
+                  onChange={event => setDemoRole(event.target.value)}
+                  className="rounded-lg border border-[var(--line)] bg-white px-2 py-1 capitalize"
+                >
+                  <option value="creator">Creator</option>
+                  <option value="brand">Brand</option>
+                </select>
+              </label>
+            )}
+            {currentRole === "brand" && (
+              <button
+                className="py-2 text-left"
+                onClick={() => {
+                  setLocation("/saved");
+                  setOpen(false);
+                }}
+              >
+                Saved creators
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -477,6 +707,12 @@ function SideRail({ active, demoRole }: { active: string; demoRole: string }) {
             label: "Workspace",
             icon: LayoutDashboard,
             path: "/creator",
+          },
+          {
+            id: "portfolio",
+            label: "Portfolio Studio",
+            icon: ImageIcon,
+            path: "/creator/portfolio",
           },
           {
             id: "discover",
@@ -509,6 +745,12 @@ function SideRail({ active, demoRole }: { active: string; demoRole: string }) {
             label: "My briefs",
             icon: BriefcaseBusiness,
             path: "/briefs",
+          },
+          {
+            id: "saved",
+            label: "Saved creators",
+            icon: Bookmark,
+            path: "/saved",
           },
           {
             id: "requests",
@@ -563,10 +805,12 @@ function CreatorCard({
   creator,
   saved,
   onSave,
+  allowSave = true,
 }: {
   creator: Creator;
   saved: boolean;
   onSave: () => void;
+  allowSave?: boolean;
 }) {
   const [, setLocation] = useLocation();
   return (
@@ -575,14 +819,22 @@ function CreatorCard({
         className="relative block aspect-[4/3] w-full overflow-hidden bg-[#e8ebf2] text-left"
         onClick={() => setLocation(`/creator/${creator.id}`)}
       >
-        <img
-          src={creator.projects[0].image}
-          alt=""
-          className="portfolio-img h-full w-full object-cover"
-        />
-        <span className="absolute left-3 top-3">
-          <Tag tone="dark">{creator.projects[0].type}</Tag>
-        </span>
+        {creator.projects[0] ? (
+          <>
+            <img
+              src={creator.projects[0].image}
+              alt=""
+              className="portfolio-img h-full w-full object-cover"
+            />
+            <span className="absolute left-3 top-3">
+              <Tag tone="dark">{creator.projects[0].type}</Tag>
+            </span>
+          </>
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center text-sm text-[#687087]">
+            Portfolio coming soon
+          </span>
+        )}
         <span className="absolute right-3 top-3 rounded-full bg-white/85 p-2 text-[var(--navy)] backdrop-blur">
           <ArrowUpRight size={15} />
         </span>
@@ -598,16 +850,18 @@ function CreatorCard({
               {creator.headline}
             </p>
           </div>
-          <button
-            aria-label="Save creator"
-            onClick={e => {
-              e.stopPropagation();
-              onSave();
-            }}
-            className={`rounded-full border p-2 transition ${saved ? "border-[var(--lime)] bg-[var(--lime)] text-[var(--navy)]" : "border-[var(--line)] text-[#9aa1b2] hover:text-[var(--ink)]"}`}
-          >
-            <Bookmark size={14} fill={saved ? "currentColor" : "none"} />
-          </button>
+          {allowSave && (
+            <button
+              aria-label="Save creator"
+              onClick={e => {
+                e.stopPropagation();
+                onSave();
+              }}
+              className={`rounded-full border p-2 transition ${saved ? "border-[var(--lime)] bg-[var(--lime)] text-[var(--navy)]" : "border-[var(--line)] text-[#9aa1b2] hover:text-[var(--ink)]"}`}
+            >
+              <Bookmark size={14} fill={saved ? "currentColor" : "none"} />
+            </button>
+          )}
         </div>
         <div className="mt-4 flex flex-wrap gap-1.5">
           <Tag>{creator.location}</Tag>
@@ -623,10 +877,14 @@ function Discover({
   creators,
   savedIds,
   toggleSave,
+  isDemoData = true,
+  allowSave = true,
 }: {
   creators: Creator[];
   savedIds: string[];
   toggleSave: (id: string) => void;
+  isDemoData?: boolean;
+  allowSave?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("All work");
@@ -758,7 +1016,9 @@ function Discover({
         </div>
       </div>
       <div className="mt-8 flex items-center justify-between">
-        <div className="eyebrow">{filtered.length} profiles / sample data</div>
+        <div className="eyebrow">
+          {filtered.length} profiles{isDemoData ? " / sample data" : ""}
+        </div>
         <div className="flex items-center gap-2 text-xs text-[#98a0b1]">
           <span className="h-2 w-2 rounded-full bg-[var(--lime)]" />{" "}
           Availability is self-reported
@@ -772,6 +1032,7 @@ function Discover({
               creator={c}
               saved={savedIds.includes(c.id)}
               onSave={() => toggleSave(c.id)}
+              allowSave={allowSave}
             />
           ))}
         </div>
@@ -788,7 +1049,13 @@ function Discover({
   );
 }
 
-function Hero({ setDemoRole }: { setDemoRole: (x: string) => void }) {
+function Hero({
+  setDemoRole,
+  onRoleSelect,
+}: {
+  setDemoRole: (x: string) => void;
+  onRoleSelect: (role: "creator" | "brand") => void;
+}) {
   const [, setLocation] = useLocation();
   return (
     <div className="mx-auto max-w-[1440px] px-5 py-8 lg:px-10 lg:py-12">
@@ -814,6 +1081,7 @@ function Hero({ setDemoRole }: { setDemoRole: (x: string) => void }) {
               variant="light"
               onClick={() => {
                 setDemoRole("creator");
+                onRoleSelect("creator");
                 setLocation("/creator");
               }}
             >
@@ -823,6 +1091,7 @@ function Hero({ setDemoRole }: { setDemoRole: (x: string) => void }) {
               variant="dark"
               onClick={() => {
                 setDemoRole("brand");
+                onRoleSelect("brand");
                 setLocation("/discover");
               }}
             >
@@ -854,6 +1123,7 @@ function Hero({ setDemoRole }: { setDemoRole: (x: string) => void }) {
           <button
             onClick={() => {
               setDemoRole("creator");
+              onRoleSelect("creator");
               setLocation("/creator");
             }}
             className="mt-5 text-sm font-bold"
@@ -872,6 +1142,7 @@ function Hero({ setDemoRole }: { setDemoRole: (x: string) => void }) {
           <button
             onClick={() => {
               setDemoRole("brand");
+              onRoleSelect("brand");
               setLocation("/discover");
             }}
             className="mt-5 text-sm font-bold"
@@ -890,6 +1161,7 @@ function Hero({ setDemoRole }: { setDemoRole: (x: string) => void }) {
           <button
             onClick={() => {
               setDemoRole("brand");
+              onRoleSelect("brand");
               setLocation("/briefs/new");
             }}
             className="mt-5 text-sm font-bold"
@@ -905,13 +1177,20 @@ function Hero({ setDemoRole }: { setDemoRole: (x: string) => void }) {
 function CreatorWorkspace({
   creators,
   setCreators,
+  existingProfile,
+  isLive = false,
+  onSave,
 }: {
   creators: Creator[];
   setCreators: (x: Creator[]) => void;
+  existingProfile?: Creator;
+  isLive?: boolean;
+  onSave?: (profile: Creator, published: boolean) => Promise<Creator | void>;
 }) {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(0);
   const [published, setPublished] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({
     name: "",
     headline: "",
@@ -926,6 +1205,28 @@ function CreatorWorkspace({
     rates: "",
     workflow: "",
   });
+  const [generatedProfile, setGeneratedProfile] = useState<Creator | undefined>(
+    existingProfile
+  );
+  useEffect(() => {
+    if (!existingProfile) return;
+    setGeneratedProfile(existingProfile);
+    setPublished(Boolean(existingProfile.published));
+    setAnswers({
+      name: existingProfile.name,
+      headline: existingProfile.headline,
+      location: existingProfile.location,
+      mode: existingProfile.mode,
+      skills: existingProfile.skills.join(", "),
+      tools: existingProfile.tools.join(", "),
+      types: existingProfile.types.join(", "),
+      styles: existingProfile.styles.join(", "),
+      experience: existingProfile.experience,
+      formats: existingProfile.formats.join(", "),
+      rates: existingProfile.rates,
+      workflow: existingProfile.workflow,
+    });
+  }, [existingProfile]);
   const questions = [
     {
       key: "name",
@@ -945,6 +1246,12 @@ function CreatorWorkspace({
       label: "Where do you work from?",
       hint: "City, region, or distributed",
       placeholder: "e.g. Los Angeles, CA",
+    },
+    {
+      key: "mode",
+      label: "How do you prefer to work?",
+      hint: "Choose the arrangement you support",
+      placeholder: "remote, hybrid, or on-site",
     },
     {
       key: "skills",
@@ -997,9 +1304,9 @@ function CreatorWorkspace({
   ];
   const q = questions[step];
   const update = (value: string) => setAnswers({ ...answers, [q.key]: value });
-  const generate = () => {
+  const makeProfile = (profilePublished: boolean): Creator => {
     const profile: Creator = {
-      id: "me",
+      id: existingProfile?.id || "me",
       slug: (answers.name || "my-profile")
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-"),
@@ -1022,19 +1329,59 @@ function CreatorWorkspace({
       workflow:
         answers.workflow ||
         "A considered process with room for iteration and clear handoffs.",
-      projects: [
-        {
-          title: "First project preview",
-          type: split(answers.types || "Concept work")[0],
-          image: seedCreators[1].projects[0].image,
-          description:
-            "A concept project. Add your own image, video, or asset when you publish.",
-        },
-      ],
+      published: profilePublished,
+      projects: isLive
+        ? []
+        : [
+            {
+              title: "First project preview",
+              type: split(answers.types || "Concept work")[0],
+              image: seedCreators[1].projects[0].image,
+              description:
+                "A concept project. Add your own image, video, or asset when you publish.",
+            },
+          ],
     };
-    setCreators([...creators.filter(c => c.id !== "me"), profile]);
-    setPublished(true);
+    return profile;
+  };
+  const generate = () => {
+    const staysPublished = isLive && Boolean(existingProfile?.published);
+    const profile = makeProfile(staysPublished);
+    setGeneratedProfile(profile);
+    if (!isLive) setCreators([...creators.filter(c => c.id !== "me"), profile]);
+    setPublished(staysPublished);
     toast.success("Profile draft generated from your answers");
+  };
+  const persistProfile = async (nextPublished: boolean) => {
+    const profile = generatedProfile || makeProfile(nextPublished);
+    setSaving(true);
+    try {
+      if (onSave) {
+        const persisted = await onSave(
+          { ...profile, published: nextPublished },
+          nextPublished
+        );
+        setGeneratedProfile(
+          persisted || { ...profile, published: nextPublished }
+        );
+      } else {
+        const next = { ...profile, published: nextPublished };
+        setCreators([...creators.filter(creator => creator.id !== "me"), next]);
+        setGeneratedProfile(next);
+        toast.success(
+          nextPublished
+            ? "Profile published in this demo only"
+            : "Draft saved in this demo only"
+        );
+      }
+      setPublished(nextPublished);
+    } catch {
+      toast.error(
+        "Could not save profile. Check your connection and try again."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <div className="mx-auto max-w-[1440px] px-5 py-8 lg:px-10">
@@ -1049,7 +1396,7 @@ function CreatorWorkspace({
             <i>louder</i> when it has context.
           </h1>
         </div>
-        <Tag tone="lime">Demo mode</Tag>
+        <Tag tone="lime">{isLive ? "Live account" : "Demo mode"}</Tag>
       </div>
       <div className="mt-10 grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
         <section className="surface min-h-[520px] p-6 lg:p-10">
@@ -1059,7 +1406,11 @@ function CreatorWorkspace({
               {String(questions.length).padStart(2, "0")}
             </span>
             <span className="text-xs font-semibold text-[#a2a8b7]">
-              Saved locally as draft
+              {isLive
+                ? existingProfile
+                  ? "Loaded from your account"
+                  : "Not saved yet"
+                : "Saved locally as demo draft"}
             </span>
           </div>
           <div className="mt-16 max-w-xl">
@@ -1118,7 +1469,7 @@ function CreatorWorkspace({
         <aside className="space-y-5">
           <div className="surface-dark p-6 lg:p-8">
             <div className="flex items-center justify-between">
-              <div className="eyebrow text-white/45">Live profile preview</div>
+              <div className="eyebrow text-white/45">Profile preview</div>
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
                 <ImageIcon size={16} />
               </div>
@@ -1136,18 +1487,21 @@ function CreatorWorkspace({
             </div>
             <div className="mt-8 border-t border-white/10 pt-5">
               <div className="text-sm leading-6 text-white/65">
-                {published
+                {generatedProfile
                   ? "Your editable draft is ready. Nothing here is published until you choose to publish it."
                   : "Answer the questions to turn your process into a professional profile."}
               </div>
             </div>
-            {published && (
+            {generatedProfile && (
               <Button
                 variant="light"
                 className="mt-6 w-full"
                 onClick={() => {
-                  setLocation("/creator/me");
-                  toast.success("Preview opened");
+                  if (generatedProfile.id !== "me") {
+                    setLocation(`/creator/${generatedProfile.id}`);
+                  } else {
+                    toast.info("Save your profile to preview it");
+                  }
                 }}
               >
                 Preview profile <ArrowUpRight size={15} />
@@ -1165,6 +1519,35 @@ function CreatorWorkspace({
               self-reported.
             </p>
           </div>
+          {generatedProfile && (
+            <div className="surface p-5">
+              <div className="eyebrow">Publishing</div>
+              <p className="mt-2 text-sm text-[#687087]">
+                {published
+                  ? "Your profile is public."
+                  : "Your profile is private."}
+              </p>
+              <div className="mt-4 flex gap-2">
+                <Button
+                  variant="ghost"
+                  disabled={saving}
+                  onClick={() => void persistProfile(false)}
+                >
+                  Save draft
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={() => void persistProfile(!published)}
+                >
+                  {saving
+                    ? "Saving…"
+                    : published
+                      ? "Unpublish"
+                      : "Publish profile"}
+                </Button>
+              </div>
+            </div>
+          )}
         </aside>
       </div>
     </div>
@@ -1177,16 +1560,38 @@ function Profile({
   toggleSave,
   demoRole,
   briefs,
+  canSave = true,
+  onCollaborate,
 }: {
   creator: Creator;
   saved: boolean;
   toggleSave: () => void;
   demoRole: string;
   briefs: Brief[];
+  canSave?: boolean;
+  onCollaborate?: (briefId: number, message: string) => Promise<void>;
 }) {
   const [, setLocation] = useLocation();
   const [requestOpen, setRequestOpen] = useState(false);
   const [sent, setSent] = useState(false);
+  const [selectedBriefId, setSelectedBriefId] = useState(
+    briefs.find(brief => brief.status === "published")?.id || ""
+  );
+  const [requestMessage, setRequestMessage] = useState(
+    `Hi ${creator.name}, your work feels right for this brief because…`
+  );
+  const [sending, setSending] = useState(false);
+  useEffect(() => {
+    if (
+      !briefs.some(
+        brief => brief.id === selectedBriefId && brief.status === "published"
+      )
+    ) {
+      setSelectedBriefId(
+        briefs.find(brief => brief.status === "published")?.id || ""
+      );
+    }
+  }, [briefs, selectedBriefId]);
   return (
     <div className="mx-auto max-w-[1440px] px-5 py-8 lg:px-10">
       <button
@@ -1209,10 +1614,15 @@ function Profile({
                 {creator.headline}
               </p>
             </div>
-            <Button variant={saved ? "primary" : "ghost"} onClick={toggleSave}>
-              <Bookmark size={15} fill={saved ? "currentColor" : "none"} />
-              {saved ? "Saved" : "Save creator"}
-            </Button>
+            {canSave && (
+              <Button
+                variant={saved ? "primary" : "ghost"}
+                onClick={toggleSave}
+              >
+                <Bookmark size={15} fill={saved ? "currentColor" : "none"} />
+                {saved ? "Saved" : "Save creator"}
+              </Button>
+            )}
           </div>
           <div className="mt-10 grid gap-4 md:grid-cols-2">
             {creator.projects.map((p, i) => (
@@ -1221,13 +1631,19 @@ function Profile({
                 className={`portfolio-card surface overflow-hidden ${i === 0 ? "md:col-span-2" : ""}`}
               >
                 <div
-                  className={`relative overflow-hidden ${i === 0 ? "aspect-[16/8]" : "aspect-[4/3]"}`}
+                  className={`relative overflow-hidden ${i === 0 ? "aspect-[16/8]" : "aspect-[4/3]"} ${p.image ? "" : "bg-[#e8ebf2]"}`}
                 >
-                  <img
-                    src={p.image}
-                    alt=""
-                    className="portfolio-img h-full w-full object-cover"
-                  />
+                  {p.image ? (
+                    <img
+                      src={p.image}
+                      alt=""
+                      className="portfolio-img h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-[#8991a2]">
+                      No project media
+                    </div>
+                  )}
                   <span className="absolute left-4 top-4">
                     <Tag tone="dark">{p.type}</Tag>
                   </span>
@@ -1241,6 +1657,51 @@ function Profile({
                   </div>
                   {p.concept && <Tag>CONCEPT WORK</Tag>}
                 </div>
+                {(p.role ||
+                  p.challenge ||
+                  p.approach ||
+                  p.outcomes ||
+                  p.impactSummary ||
+                  p.skills ||
+                  p.tools) && (
+                  <div className="grid gap-3 border-t border-[var(--line)] p-4 text-sm sm:grid-cols-2">
+                    {p.role && (
+                      <p>
+                        <strong>Role:</strong> {p.role}
+                      </p>
+                    )}
+                    {p.challenge && (
+                      <p>
+                        <strong>Challenge:</strong> {p.challenge}
+                      </p>
+                    )}
+                    {p.approach && (
+                      <p>
+                        <strong>Approach:</strong> {p.approach}
+                      </p>
+                    )}
+                    {p.outcomes && (
+                      <p>
+                        <strong>Outcomes:</strong> {p.outcomes}
+                      </p>
+                    )}
+                    {p.impactSummary && (
+                      <p>
+                        <strong>Impact:</strong> {p.impactSummary}
+                      </p>
+                    )}
+                    {p.skills && (
+                      <p>
+                        <strong>Skills:</strong> {p.skills}
+                      </p>
+                    )}
+                    {p.tools && (
+                      <p>
+                        <strong>Tools:</strong> {p.tools}
+                      </p>
+                    )}
+                  </div>
+                )}
               </article>
             ))}
           </div>
@@ -1318,15 +1779,24 @@ function Profile({
               Choose a brief and add a note. This sends a request — it does not
               start a contract or payment.
             </p>
-            <select className="mt-6 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm">
-              <option>{briefs[0]?.title || "Create a brief first"}</option>
-              {briefs.slice(1).map(b => (
-                <option key={b.id}>{b.title}</option>
-              ))}
+            <select
+              value={selectedBriefId}
+              onChange={event => setSelectedBriefId(event.target.value)}
+              className="mt-6 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm"
+            >
+              <option value="">Choose a published brief</option>
+              {briefs
+                .filter(brief => brief.status === "published")
+                .map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.title}
+                  </option>
+                ))}
             </select>
             <textarea
               rows={4}
-              defaultValue={`Hi ${creator.name}, your work feels right for this brief because…`}
+              value={requestMessage}
+              onChange={event => setRequestMessage(event.target.value)}
               className="mt-3 w-full rounded-xl border border-[var(--line)] p-3 text-sm outline-none"
             />
             <div className="mt-5 flex justify-end gap-2">
@@ -1334,13 +1804,33 @@ function Profile({
                 Cancel
               </Button>
               <Button
-                onClick={() => {
+                disabled={
+                  sending ||
+                  !selectedBriefId ||
+                  requestMessage.trim().length < 10
+                }
+                onClick={async () => {
+                  if (onCollaborate) {
+                    setSending(true);
+                    try {
+                      await onCollaborate(
+                        Number(selectedBriefId),
+                        requestMessage
+                      );
+                    } catch {
+                      toast.error("Could not send collaboration request");
+                      return;
+                    } finally {
+                      setSending(false);
+                    }
+                  } else {
+                    toast.success("Request saved in this demo only");
+                  }
                   setSent(true);
                   setRequestOpen(false);
-                  toast.success("Request sent in demo mode");
                 }}
               >
-                Send request
+                {sending ? "Sending…" : "Send request"}
               </Button>
             </div>
           </div>
@@ -1359,9 +1849,15 @@ function Profile({
 function BriefForm({
   briefs,
   setBriefs,
+  existingBrief,
+  isLive = false,
+  onSave,
 }: {
   briefs: Brief[];
-  setBriefs: (x: Brief[]) => void;
+  setBriefs?: (x: Brief[]) => void;
+  existingBrief?: Brief;
+  isLive?: boolean;
+  onSave?: (values: Omit<Brief, "id" | "creatorIds">) => Promise<void>;
 }) {
   const [, setLocation] = useLocation();
   const [form, setForm] = useState({
@@ -1380,32 +1876,86 @@ function BriefForm({
     mode: "remote",
     licensing: "Commercial use requested; creator retains credit.",
   });
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!existingBrief) return;
+    setForm({
+      title: existingBrief.title,
+      objective: existingBrief.objective,
+      type: existingBrief.type,
+      style: existingBrief.style,
+      audience: existingBrief.audience || "",
+      platform: existingBrief.platform,
+      duration: existingBrief.duration || "",
+      ratio: existingBrief.ratio || "",
+      deliverables: String(existingBrief.deliverables || 1),
+      budget: existingBrief.budget,
+      deadline: existingBrief.deadline,
+      location: existingBrief.location || "Remote",
+      mode: existingBrief.mode || "remote",
+      licensing: existingBrief.licensing || "",
+    });
+  }, [existingBrief]);
   const set = (key: string, value: string) =>
     setForm({ ...form, [key]: value });
-  const publish = (status: "draft" | "published") => {
-    if (!form.title || !form.objective) {
-      toast.error("Add a title and objective first");
+  const publish = async (status: "draft" | "published" | "closed") => {
+    if (
+      !form.title ||
+      form.title.length < 3 ||
+      form.objective.length < 10 ||
+      !form.deadline
+    ) {
+      toast.error("Add a title, objective, and deadline first");
       return;
     }
-    setBriefs([
-      ...briefs,
-      {
-        id: `b${Date.now()}`,
-        title: form.title,
-        objective: form.objective,
-        type: form.type,
-        style: form.style || "Open to interpretation",
-        platform: form.platform,
-        budget: form.budget,
-        deadline: form.deadline || "Date to be confirmed",
-        status,
-        creatorIds: [],
-      },
-    ]);
-    toast.success(
-      status === "published" ? "Brief published in demo mode" : "Draft saved"
-    );
-    setLocation("/briefs");
+    const values: Omit<Brief, "id" | "creatorIds"> = {
+      title: form.title,
+      objective: form.objective,
+      type: form.type,
+      style: form.style || "Open to interpretation",
+      audience: form.audience,
+      platform: form.platform,
+      duration: form.duration,
+      ratio: form.ratio,
+      deliverables: Number(form.deliverables),
+      budget: form.budget,
+      deadline: form.deadline,
+      location: form.location,
+      mode: form.mode as WorkMode,
+      licensing: form.licensing,
+      status,
+    };
+    setSaving(true);
+    try {
+      if (onSave) {
+        await onSave(values);
+      } else {
+        setBriefs?.(
+          existingBrief
+            ? briefs.map(brief =>
+                brief.id === existingBrief.id
+                  ? {
+                      ...brief,
+                      ...values,
+                      id: existingBrief.id,
+                      creatorIds: existingBrief.creatorIds,
+                    }
+                  : brief
+              )
+            : [...briefs, { id: `b${Date.now()}`, ...values, creatorIds: [] }]
+        );
+        toast.success(
+          status === "published"
+            ? "Brief published in this demo only"
+            : "Draft saved in this demo only"
+        );
+      }
+      setLocation("/briefs");
+    } catch {
+      toast.error("Could not save brief. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <div className="mx-auto max-w-[1120px] px-5 py-10 lg:px-10">
@@ -1499,6 +2049,20 @@ function BriefForm({
               onChange={v => set("location", v)}
               placeholder="Remote or Los Angeles"
             />
+            <label className="block">
+              <span className="eyebrow mb-2 block text-[#747d90]">
+                Work mode
+              </span>
+              <select
+                value={form.mode}
+                onChange={event => set("mode", event.target.value)}
+                className="w-full rounded-xl border border-[var(--line)] bg-[#fafbfe] p-3 text-sm"
+              >
+                <option value="remote">Remote</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="on-site">On-site</option>
+              </select>
+            </label>
             <Field
               label="Licensing + commercial use"
               value={form.licensing}
@@ -1508,12 +2072,31 @@ function BriefForm({
             />
           </div>
           <div className="mt-7 flex flex-wrap justify-end gap-2">
-            <Button variant="ghost" onClick={() => publish("draft")}>
-              Save draft
-            </Button>
-            <Button onClick={() => publish("published")}>
-              Publish brief <ArrowUpRight size={15} />
-            </Button>
+            {existingBrief ? (
+              <Button
+                disabled={saving}
+                onClick={() => void publish(existingBrief.status)}
+              >
+                {saving ? "Saving…" : "Save changes"} <ArrowUpRight size={15} />
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  disabled={saving}
+                  onClick={() => void publish("draft")}
+                >
+                  Save draft
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={() => void publish("published")}
+                >
+                  {saving ? "Saving…" : "Publish brief"}{" "}
+                  <ArrowUpRight size={15} />
+                </Button>
+              </>
+            )}
           </div>
         </section>
         <aside className="surface-dark h-fit p-6">
@@ -1627,13 +2210,9 @@ function Briefs({ briefs }: { briefs: Brief[] }) {
             </div>
             <Button
               variant="ghost"
-              onClick={() =>
-                toast.info(
-                  "Brief detail editing is ready for the next iteration"
-                )
-              }
+              onClick={() => setLocation(`/briefs/${brief.id}/edit`)}
             >
-              Open brief <ArrowUpRight size={15} />
+              Edit brief <ArrowUpRight size={15} />
             </Button>
           </article>
         ))}
@@ -1641,11 +2220,23 @@ function Briefs({ briefs }: { briefs: Brief[] }) {
     </div>
   );
 }
-function BrandDashboard({ briefs }: { briefs: Brief[] }) {
+function BrandDashboard({
+  briefs,
+  creatorCount,
+  savedCount,
+  isLive = false,
+}: {
+  briefs: Brief[];
+  creatorCount?: number;
+  savedCount?: number;
+  isLive?: boolean;
+}) {
   const [, setLocation] = useLocation();
   return (
     <div className="mx-auto max-w-[1440px] px-5 py-10 lg:px-10">
-      <div className="eyebrow mb-4">Brand workspace / demo account</div>
+      <div className="eyebrow mb-4">
+        Brand workspace / {isLive ? "live account" : "demo account"}
+      </div>
       <div className="flex items-end justify-between gap-5 mobile-stack">
         <div>
           <h1 className="serif text-5xl tracking-[-.05em] lg:text-7xl">
@@ -1665,10 +2256,14 @@ function BrandDashboard({ briefs }: { briefs: Brief[] }) {
       <div className="mt-10 grid gap-4 md:grid-cols-3">
         <Stat
           label="Creators indexed"
-          value="148"
-          note="Across 17 specialties"
+          value={isLive ? String(creatorCount ?? 0).padStart(2, "0") : "148"}
+          note={isLive ? "Published profiles" : "Across 17 specialties"}
         />
-        <Stat label="Shortlisted" value="06" note="Ready for a conversation" />
+        <Stat
+          label="Shortlisted"
+          value={isLive ? String(savedCount ?? 0).padStart(2, "0") : "06"}
+          note={isLive ? "Saved to your account" : "Ready for a conversation"}
+        />
         <Stat
           label="Live briefs"
           value={String(
@@ -1682,28 +2277,36 @@ function BrandDashboard({ briefs }: { briefs: Brief[] }) {
           <div className="flex items-center justify-between">
             <div>
               <div className="eyebrow">Your latest brief</div>
-              <h2 className="mt-2 text-xl font-black">{briefs[0]?.title}</h2>
+              <h2 className="mt-2 text-xl font-black">
+                {briefs[0]?.title || "No briefs yet"}
+              </h2>
             </div>
             <Tag tone="lime">{briefs[0]?.status}</Tag>
           </div>
-          <div className="mt-7 grid gap-4 sm:grid-cols-3">
-            <div>
-              <div className="eyebrow">Objective</div>
-              <p className="mt-2 text-sm leading-6 text-[#687087]">
-                {briefs[0]?.objective}
-              </p>
+          {briefs[0] ? (
+            <div className="mt-7 grid gap-4 sm:grid-cols-3">
+              <div>
+                <div className="eyebrow">Objective</div>
+                <p className="mt-2 text-sm leading-6 text-[#687087]">
+                  {briefs[0]?.objective}
+                </p>
+              </div>
+              <div>
+                <div className="eyebrow">Direction</div>
+                <p className="mt-2 text-sm leading-6 text-[#687087]">
+                  {briefs[0]?.style}
+                </p>
+              </div>
+              <div>
+                <div className="eyebrow">Budget</div>
+                <p className="mt-2 text-sm font-bold">{briefs[0]?.budget}</p>
+              </div>
             </div>
-            <div>
-              <div className="eyebrow">Direction</div>
-              <p className="mt-2 text-sm leading-6 text-[#687087]">
-                {briefs[0]?.style}
-              </p>
-            </div>
-            <div>
-              <div className="eyebrow">Budget</div>
-              <p className="mt-2 text-sm font-bold">{briefs[0]?.budget}</p>
-            </div>
-          </div>
+          ) : (
+            <p className="mt-4 text-sm text-[#687087]">
+              Create your first brief to start a collaboration.
+            </p>
+          )}
           <button
             onClick={() => setLocation("/briefs")}
             className="mt-7 text-sm font-bold"
@@ -1712,13 +2315,17 @@ function BrandDashboard({ briefs }: { briefs: Brief[] }) {
           </button>
         </div>
         <div className="surface-dark p-6">
-          <div className="eyebrow text-white/45">Signal / this week</div>
+          <div className="eyebrow text-white/45">
+            {isLive ? "Shortlist" : "Signal / this week"}
+          </div>
           <div className="mt-6 flex items-end gap-3">
-            <div className="text-6xl font-black tracking-[-.07em]">24</div>
+            <div className="text-6xl font-black tracking-[-.07em]">
+              {isLive ? String(savedCount ?? 0).padStart(2, "0") : "24"}
+            </div>
             <div className="pb-2 text-sm text-white/55">
-              new creator profiles
+              {isLive ? "creators saved" : "new creator profiles"}
               <br />
-              matching your taste
+              {isLive ? "for later" : "matching your taste"}
             </div>
           </div>
           <div className="mt-8 border-t border-white/10 pt-5 text-sm text-white/55">
@@ -1728,9 +2335,9 @@ function BrandDashboard({ briefs }: { briefs: Brief[] }) {
           <Button
             variant="dark"
             className="mt-6"
-            onClick={() => setLocation("/discover")}
+            onClick={() => setLocation(isLive ? "/saved" : "/discover")}
           >
-            Open discovery <Compass size={15} />
+            {isLive ? "Open shortlist" : "Open discovery"} <Compass size={15} />
           </Button>
         </div>
       </div>
@@ -1765,42 +2372,333 @@ function Requests() {
         <br />
         <i>in motion.</i>
       </h1>
-      <div className="surface mt-10 divide-y divide-[var(--line)]">
-        <div className="flex items-start gap-4 p-5">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#f0f3db] text-[var(--navy)]">
-            <HeartHandshake size={18} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-black">A brand saved your profile</h3>
-                <p className="mt-1 text-sm text-[#687087]">
-                  A softer internet / FrameFoundry sample brand
-                </p>
-              </div>
-              <Tag tone="lime">New</Tag>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-[#4f576b]">
-              “Your work around atmosphere and human texture feels aligned with
-              our launch film.”
-            </p>
-            <Button variant="ghost" className="mt-4">
-              View brief <ArrowUpRight size={14} />
-            </Button>
-          </div>
-        </div>
-        <div className="p-5 text-sm text-[#8991a2]">
-          Requests are intentionally lightweight in MVP 1. Full messaging and
-          project management are planned for a later release.
-        </div>
+      <div className="surface mt-10 p-8 text-center">
+        <HeartHandshake size={26} className="mx-auto text-[#8991a2]" />
+        <h2 className="mt-4 font-bold">No demo requests</h2>
+        <p className="mt-2 text-sm text-[#687087]">
+          Requests appear here only when you are signed in. Demo mode does not
+          create or display marketplace activity.
+        </p>
       </div>
     </div>
   );
 }
 
+function LiveBriefs({
+  briefs,
+  loading,
+  error,
+  isBrand,
+  onEdit,
+  onStatus,
+}: {
+  briefs: Brief[];
+  loading: boolean;
+  error: boolean;
+  isBrand: boolean;
+  onEdit: (brief: Brief) => void;
+  onStatus: (id: number, status: "draft" | "published" | "closed") => void;
+}) {
+  const [, setLocation] = useLocation();
+  return (
+    <div className="mx-auto max-w-[1200px] px-5 py-10 lg:px-10">
+      <div className="flex items-end justify-between gap-5 mobile-stack">
+        <div>
+          <div className="eyebrow mb-4">
+            Brief desk / {isBrand ? "your briefs" : "live opportunities"}
+          </div>
+          <h1 className="serif text-5xl tracking-[-.05em] lg:text-7xl">
+            Good work starts
+            <br />
+            <i>with a brief.</i>
+          </h1>
+        </div>
+        {isBrand && (
+          <Button onClick={() => setLocation("/briefs/new")}>
+            <Plus size={16} /> New brief
+          </Button>
+        )}
+      </div>
+      {loading ? (
+        <p className="mt-10 text-sm text-[#687087]">Loading briefs…</p>
+      ) : error ? (
+        <p role="alert" className="mt-10 text-sm text-red-700">
+          Could not load briefs. Refresh to try again.
+        </p>
+      ) : briefs.length === 0 ? (
+        <div className="surface mt-10 p-8 text-center">
+          <BriefcaseBusiness size={24} className="mx-auto text-[#8991a2]" />
+          <h2 className="mt-3 font-bold">
+            {isBrand ? "No briefs yet" : "No live briefs yet"}
+          </h2>
+          <p className="mt-2 text-sm text-[#687087]">
+            {isBrand
+              ? "Create a brief to start a collaboration."
+              : "Published brand opportunities will appear here."}
+          </p>
+        </div>
+      ) : (
+        <div className="mt-10 space-y-3">
+          {briefs.map((brief, index) => (
+            <article
+              key={brief.id}
+              className="surface flex items-center justify-between gap-5 p-5 mobile-stack"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#f0f2f7] text-xs font-black text-[#687087] mono">
+                  {String(index + 1).padStart(2, "0")}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black">{brief.title}</h3>
+                    <Tag
+                      tone={brief.status === "published" ? "lime" : "default"}
+                    >
+                      {brief.status}
+                    </Tag>
+                  </div>
+                  <p className="mt-1 text-sm text-[#687087]">
+                    {brief.objective}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <Tag>{brief.type}</Tag>
+                    <Tag>{brief.platform}</Tag>
+                    <Tag>{brief.budget}</Tag>
+                    <Tag>{brief.deadline}</Tag>
+                  </div>
+                </div>
+              </div>
+              {isBrand ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button variant="ghost" onClick={() => onEdit(brief)}>
+                    Edit
+                  </Button>
+                  {brief.status !== "closed" && (
+                    <select
+                      aria-label={`Update ${brief.title} status`}
+                      value={brief.status}
+                      onChange={event =>
+                        onStatus(
+                          Number(brief.id),
+                          event.target.value as "draft" | "published" | "closed"
+                        )
+                      }
+                      className="rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="published">Published</option>
+                      <option value="closed">Close</option>
+                    </select>
+                  )}
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SavedCreators({
+  saved,
+  loading,
+  error,
+  onRemove,
+}: {
+  saved: Array<{ savedId: number; profile: PersistedCreator["profile"] }>;
+  loading: boolean;
+  error: boolean;
+  onRemove: (creatorId: number) => void;
+}) {
+  const [, setLocation] = useLocation();
+  return (
+    <div className="mx-auto max-w-[1200px] px-5 py-10 lg:px-10">
+      <div className="eyebrow mb-4">Brand workspace / shortlist</div>
+      <h1 className="serif text-5xl tracking-[-.05em] lg:text-7xl">
+        Saved <i>creators.</i>
+      </h1>
+      {loading ? (
+        <p className="mt-10 text-sm text-[#687087]">Loading saved creators…</p>
+      ) : error ? (
+        <p role="alert" className="mt-10 text-sm text-red-700">
+          Could not load your shortlist.
+        </p>
+      ) : saved.length === 0 ? (
+        <div className="surface mt-10 p-8 text-center">
+          <Bookmark size={24} className="mx-auto text-[#8991a2]" />
+          <h2 className="mt-3 font-bold">Your shortlist is empty</h2>
+          <p className="mt-2 text-sm text-[#687087]">
+            Save published creators from discovery to keep them here.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {saved.map(item => {
+            const creator = mapCreator({ profile: item.profile, projects: [] });
+            return (
+              <article key={item.savedId} className="surface p-5">
+                <h2 className="font-bold">{creator.name}</h2>
+                <p className="mt-1 text-sm text-[#687087]">
+                  {creator.headline}
+                </p>
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setLocation(`/creator/${creator.id}`)}
+                  >
+                    Open profile
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => onRemove(Number(creator.id))}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DemoSavedCreators({
+  creators,
+  savedIds,
+  onSave,
+}: {
+  creators: Creator[];
+  savedIds: string[];
+  onSave: (id: string) => void;
+}) {
+  const saved = creators.filter(creator => savedIds.includes(creator.id));
+  return (
+    <div className="mx-auto max-w-[1200px] px-5 py-10 lg:px-10">
+      <div className="eyebrow mb-4">Demo workspace / local shortlist</div>
+      <h1 className="serif text-5xl tracking-[-.05em] lg:text-7xl">
+        Saved <i>creators.</i>
+      </h1>
+      {saved.length ? (
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {saved.map(creator => (
+            <CreatorCard
+              key={creator.id}
+              creator={creator}
+              saved
+              onSave={() => onSave(creator.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="surface mt-10 p-8 text-center">
+          <Bookmark size={24} className="mx-auto text-[#8991a2]" />
+          <h2 className="mt-3 font-bold">Your demo shortlist is empty</h2>
+          <p className="mt-2 text-sm text-[#687087]">
+            Saved sample creators stay in this browser only.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type LiveRequest = {
+  request: {
+    id: number;
+    status: "sent" | "accepted" | "declined";
+    message: string;
+  };
+  briefTitle: string;
+  creatorName?: string | null;
+  brandName?: string | null;
+};
+
+function LiveRequests({
+  requests,
+  loading,
+  error,
+  isCreator,
+  onRespond,
+}: {
+  requests: LiveRequest[];
+  loading: boolean;
+  error: boolean;
+  isCreator: boolean;
+  onRespond: (requestId: number, status: "accepted" | "declined") => void;
+}) {
+  return (
+    <div className="mx-auto max-w-[1000px] px-5 py-10 lg:px-10">
+      <div className="eyebrow mb-4">Collaboration desk</div>
+      <h1 className="serif text-5xl tracking-[-.05em] lg:text-7xl">
+        Good things,
+        <br />
+        <i>in motion.</i>
+      </h1>
+      {loading ? (
+        <p className="mt-10 text-sm text-[#687087]">Loading requests…</p>
+      ) : error ? (
+        <p role="alert" className="mt-10 text-sm text-red-700">
+          Could not load collaboration requests.
+        </p>
+      ) : requests.length === 0 ? (
+        <div className="surface mt-10 p-8 text-center">
+          <HeartHandshake size={26} className="mx-auto text-[#8991a2]" />
+          <h2 className="mt-4 font-bold">No collaboration requests</h2>
+          <p className="mt-2 text-sm text-[#687087]">
+            Requests for your account will appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="surface mt-10 divide-y divide-[var(--line)]">
+          {requests.map(({ request, briefTitle, creatorName, brandName }) => (
+            <article key={request.id} className="flex items-start gap-4 p-5">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#f0f3db] text-[var(--navy)]">
+                <HeartHandshake size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="font-black">{briefTitle}</h2>
+                  <Tag tone={request.status === "sent" ? "lime" : "default"}>
+                    {request.status}
+                  </Tag>
+                </div>
+                <p className="mt-1 text-sm text-[#687087]">
+                  {isCreator
+                    ? `From ${brandName || "a brand"}`
+                    : `To ${creatorName || "a creator"}`}
+                </p>
+                <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-[#4f576b]">
+                  {request.message}
+                </p>
+                {isCreator && request.status === "sent" && (
+                  <div className="mt-4 flex gap-2">
+                    <Button onClick={() => onRespond(request.id, "accepted")}>
+                      Accept
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => onRespond(request.id, "declined")}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const auth = useAuth();
+  const utils = trpc.useUtils();
   const savedState = loadState();
   const [demoRole, setDemoRole] = useState<string>(
     savedState.role || "creator"
@@ -1808,15 +2706,101 @@ export default function Home() {
   const [creators, setCreators] = useState<Creator[]>(
     savedState.creators || seedCreators
   );
-  const [savedIds, setSavedIds] = useState<string[]>(savedState.savedIds || []);
+  const [demoSavedIds, setDemoSavedIds] = useState<string[]>(
+    savedState.savedIds || []
+  );
   const [briefs, setBriefs] = useState<Brief[]>(
     savedState.briefs || seedBriefs
   );
+  const path = location.split("?")[0];
+  const profileId = path.startsWith("/creator/") ? path.split("/")[2] : "";
+  const isLive = Boolean(auth.user);
+  const activeRole = isLive
+    ? auth.user?.accountType === "brand"
+      ? "brand"
+      : "creator"
+    : demoRole;
+  const isBrand = activeRole === "brand";
+  const isCreator = activeRole === "creator";
+  const creatorQuery = trpc.marketplace.creators.useQuery(undefined, {
+    enabled: isLive && (path === "/discover" || path === "/brand"),
+    retry: false,
+  });
+  const creatorDetailQuery = trpc.marketplace.creator.useQuery(
+    { id: Number(profileId) || 0 },
+    { enabled: isLive && /^\d+$/.test(profileId), retry: false }
+  );
+  const ownProfileQuery = trpc.marketplace.myProfile.useQuery(undefined, {
+    enabled: isLive && isCreator && (path === "/creator" || profileId === "me"),
+    retry: false,
+  });
+  const myBriefsQuery = trpc.marketplace.myBriefs.useQuery(undefined, {
+    enabled: isLive && isBrand,
+    retry: false,
+  });
+  const publicBriefsQuery = trpc.marketplace.briefs.useQuery(undefined, {
+    enabled: isLive && isCreator && path === "/briefs",
+    retry: false,
+  });
+  const savedCreatorsQuery = trpc.marketplace.savedCreators.useQuery(
+    undefined,
+    {
+      enabled: isLive && isBrand,
+      retry: false,
+    }
+  );
+  const requestsQuery = trpc.marketplace.requests.useQuery(undefined, {
+    enabled: isLive && path === "/requests" && (isCreator || isBrand),
+    retry: false,
+  });
+  const saveProfileMutation = trpc.marketplace.saveProfile.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.marketplace.myProfile.invalidate(),
+        utils.marketplace.creators.invalidate(),
+      ]);
+    },
+  });
+  const createBriefMutation = trpc.marketplace.createBrief.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.marketplace.myBriefs.invalidate(),
+        utils.marketplace.briefs.invalidate(),
+      ]);
+    },
+  });
+  const updateBriefMutation = trpc.marketplace.updateBrief.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.marketplace.myBriefs.invalidate(),
+        utils.marketplace.briefs.invalidate(),
+      ]);
+    },
+  });
+  const saveCreatorMutation = trpc.marketplace.saveCreator.useMutation({
+    onSuccess: () => utils.marketplace.savedCreators.invalidate(),
+  });
+  const removeSavedMutation = trpc.marketplace.removeSavedCreator.useMutation({
+    onSuccess: () => utils.marketplace.savedCreators.invalidate(),
+  });
+  const collaborateMutation = trpc.marketplace.collaborate.useMutation({
+    onSuccess: () => utils.marketplace.requests.invalidate(),
+  });
+  const respondMutation = trpc.marketplace.updateRequestStatus.useMutation({
+    onSuccess: () => utils.marketplace.requests.invalidate(),
+  });
+  const accountTypeMutation = trpc.auth.setAccountType.useMutation({
+    onSuccess: async () => {
+      await auth.refresh();
+      toast.success("Workspace updated");
+    },
+    onError: () => toast.error("Could not switch workspace"),
+  });
   const save = (id: string) => {
-    const next = savedIds.includes(id)
-      ? savedIds.filter(x => x !== id)
-      : [...savedIds, id];
-    setSavedIds(next);
+    const next = demoSavedIds.includes(id)
+      ? demoSavedIds.filter(x => x !== id)
+      : [...demoSavedIds, id];
+    setDemoSavedIds(next);
     localStorage.setItem(
       key,
       JSON.stringify({ role: demoRole, creators, briefs, savedIds: next })
@@ -1831,42 +2815,444 @@ export default function Home() {
     setCreators(next);
     localStorage.setItem(
       key,
-      JSON.stringify({ role: demoRole, creators: next, briefs, savedIds })
+      JSON.stringify({
+        role: demoRole,
+        creators: next,
+        briefs,
+        savedIds: demoSavedIds,
+      })
     );
   };
   const persistBriefs = (next: Brief[]) => {
     setBriefs(next);
     localStorage.setItem(
       key,
-      JSON.stringify({ role: demoRole, creators, savedIds, briefs: next })
+      JSON.stringify({
+        role: demoRole,
+        creators,
+        savedIds: demoSavedIds,
+        briefs: next,
+      })
     );
   };
-  const path = location.split("?")[0];
-  const profileId = path.startsWith("/creator/") ? path.split("/")[2] : "";
-  const profile = creators.find(c => c.id === profileId) || creators[0];
+  const persistedCreators =
+    creatorQuery.data?.map(profile => mapCreator({ profile, projects: [] })) ||
+    [];
+  const persistedSaved = savedCreatorsQuery.data || [];
+  const activeCreators = isLive ? persistedCreators : creators;
+  const activeSavedIds = isLive
+    ? persistedSaved.map(item => String(item.profile.id))
+    : demoSavedIds;
+  const activeBriefs = isLive
+    ? (isBrand ? myBriefsQuery.data : publicBriefsQuery.data)?.map(mapBrief) ||
+      []
+    : briefs;
+  const brandBriefs = isLive ? myBriefsQuery.data?.map(mapBrief) || [] : briefs;
+  const ownCreator = ownProfileQuery.data
+    ? mapCreator(ownProfileQuery.data)
+    : undefined;
+  const publicCreator = creatorDetailQuery.data
+    ? mapCreator(creatorDetailQuery.data)
+    : undefined;
+  const selectedLiveProfile = profileId === "me" ? ownCreator : publicCreator;
+  const activeProfile = isLive
+    ? selectedLiveProfile
+    : creators.find(creator => creator.id === profileId) || creators[0];
+  const briefEditId = path.match(/^\/briefs\/(\d+)\/edit$/)?.[1];
+  const briefForEdit = briefEditId
+    ? brandBriefs.find(brief => brief.id === briefEditId)
+    : undefined;
+  const saveLiveProfile = async (profile: Creator, published: boolean) => {
+    const saved = await saveProfileMutation.mutateAsync({
+      slug: profile.slug,
+      name: profile.name,
+      headline: profile.headline,
+      bio: profile.bio,
+      location: profile.location,
+      workMode: profile.mode,
+      skills: profile.skills.join(", "),
+      tools: profile.tools.join(", "),
+      contentTypes: profile.types.join(", "),
+      styles: profile.styles.join(", "),
+      experience: profile.experience,
+      rates: profile.rates === "Range not shared" ? undefined : profile.rates,
+      formats: profile.formats.join(", "),
+      workflow: profile.workflow,
+      published: published ? 1 : 0,
+    });
+    toast.success(published ? "Profile published" : "Profile draft saved");
+    return saved ? mapCreator(saved as PersistedCreator) : undefined;
+  };
+  const saveLiveBrief = async (
+    values: Omit<Brief, "id" | "creatorIds">,
+    id?: number
+  ) => {
+    const payload = {
+      title: values.title,
+      objective: values.objective,
+      contentType: values.type,
+      style: values.style,
+      audience: values.audience || "General audience",
+      platform: values.platform,
+      duration: values.duration || "Not specified",
+      aspectRatio: values.ratio || "16:9",
+      deliverables: values.deliverables || 1,
+      budget: values.budget,
+      deadline: values.deadline,
+      location: values.location || "Remote",
+      workMode: values.mode || "remote",
+      licensing: values.licensing || "Licensing to be discussed",
+      status: values.status,
+    };
+    if (id) {
+      await updateBriefMutation.mutateAsync({ id, ...payload });
+      toast.success("Brief updated");
+    } else {
+      await createBriefMutation.mutateAsync({
+        ...payload,
+        status: payload.status === "closed" ? "draft" : payload.status,
+      });
+      toast.success(
+        values.status === "published"
+          ? "Brief published"
+          : "Brief saved as draft"
+      );
+    }
+  };
+  const toggleCreatorSave = (id: string) => {
+    if (!isLive) {
+      save(id);
+      return;
+    }
+    const creatorId = Number(id);
+    if (activeSavedIds.includes(id)) {
+      removeSavedMutation.mutate(
+        { creatorId },
+        {
+          onSuccess: () => toast.success("Creator removed from shortlist"),
+          onError: () => toast.error("Could not remove creator"),
+        }
+      );
+    } else {
+      saveCreatorMutation.mutate(
+        { creatorId },
+        {
+          onSuccess: () => toast.success("Creator saved to shortlist"),
+          onError: () => toast.error("Could not save creator"),
+        }
+      );
+    }
+  };
+  const updateBriefStatus = (
+    id: number,
+    status: "draft" | "published" | "closed"
+  ) => {
+    updateBriefMutation.mutate(
+      { id, status },
+      {
+        onSuccess: () => toast.success("Brief status updated"),
+        onError: () => toast.error("Could not update brief status"),
+      }
+    );
+  };
   let content: React.ReactNode;
-  if (path === "/discover")
-    content = (
-      <Discover creators={creators} savedIds={savedIds} toggleSave={save} />
-    );
-  else if (path === "/creator")
-    content = (
-      <CreatorWorkspace creators={creators} setCreators={persistCreators} />
-    );
-  else if (path.startsWith("/creator/"))
-    content = (
-      <Profile
-        creator={profile}
-        saved={savedIds.includes(profile.id)}
-        toggleSave={() => save(profile.id)}
-        demoRole={demoRole}
-        briefs={briefs}
+  if (path === "/discover" && isLive)
+    content = creatorQuery.isLoading ? (
+      <p className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]">
+        Loading creators…
+      </p>
+    ) : creatorQuery.error ? (
+      <p
+        role="alert"
+        className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-red-700"
+      >
+        Could not load creators. Refresh to try again.
+      </p>
+    ) : (
+      <Discover
+        creators={activeCreators}
+        savedIds={activeSavedIds}
+        toggleSave={toggleCreatorSave}
+        isDemoData={false}
+        allowSave={isBrand}
       />
     );
-  else if (path === "/brand") content = <BrandDashboard briefs={briefs} />;
-  else if (path === "/briefs/new")
-    content = <BriefForm briefs={briefs} setBriefs={persistBriefs} />;
-  else if (path === "/briefs") content = <Briefs briefs={briefs} />;
+  else if (path === "/discover")
+    content = (
+      <Discover creators={creators} savedIds={demoSavedIds} toggleSave={save} />
+    );
+  else if (path === "/creator")
+    content =
+      isLive && !isCreator ? (
+        <p
+          role="alert"
+          className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-red-700"
+        >
+          Switch to a creator account to manage a profile.
+        </p>
+      ) : isLive ? (
+        ownProfileQuery.isLoading ? (
+          <p className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]">
+            Loading your profile…
+          </p>
+        ) : ownProfileQuery.error ? (
+          <p
+            role="alert"
+            className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-red-700"
+          >
+            Could not load your profile. Refresh to try again.
+          </p>
+        ) : (
+          <CreatorWorkspace
+            creators={[]}
+            setCreators={() => undefined}
+            existingProfile={ownCreator}
+            isLive
+            onSave={saveLiveProfile}
+          />
+        )
+      ) : (
+        <CreatorWorkspace creators={creators} setCreators={persistCreators} />
+      );
+  else if (path === "/creator/portfolio")
+    content =
+      isLive && isCreator ? (
+        <Suspense
+          fallback={
+            <p
+              role="status"
+              className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]"
+            >
+              Opening Portfolio Studio…
+            </p>
+          }
+        >
+          <PortfolioStudio />
+        </Suspense>
+      ) : (
+        <div className="mx-auto max-w-[900px] px-5 py-12 lg:px-10">
+          <div className="surface p-8">
+            <div className="eyebrow">Authenticated creator workspace</div>
+            <h1 className="serif mt-3 text-4xl">Portfolio Studio</h1>
+            <p className="mt-4 text-sm leading-6 text-[#687087]">
+              Portfolio projects are private, persistent account data. Sign in
+              as a creator to manage them; demo role switching does not create a
+              creator identity.
+            </p>
+            {!isLive && (
+              <Button
+                className="mt-5"
+                onClick={() => {
+                  try {
+                    startLogin();
+                  } catch {
+                    toast.error(
+                      "Manus login is not configured in this preview"
+                    );
+                  }
+                }}
+              >
+                <LogIn size={15} /> Log in to continue
+              </Button>
+            )}
+          </div>
+        </div>
+      );
+  else if (path.startsWith("/creator/")) {
+    if (isLive && profileId === "me" && !isCreator) {
+      content = (
+        <p
+          role="alert"
+          className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-red-700"
+        >
+          Switch to a creator account to preview your profile.
+        </p>
+      );
+    } else if (isLive && profileId === "me") {
+      content = ownProfileQuery.isLoading ? (
+        <p className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]">
+          Loading your profile…
+        </p>
+      ) : ownCreator ? (
+        <Profile
+          creator={ownCreator}
+          saved={false}
+          toggleSave={() => undefined}
+          demoRole={activeRole}
+          briefs={brandBriefs}
+          canSave={false}
+        />
+      ) : (
+        <p className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]">
+          Create a profile before previewing it.
+        </p>
+      );
+    } else if (isLive) {
+      content = creatorDetailQuery.isLoading ? (
+        <p className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]">
+          Loading profile…
+        </p>
+      ) : creatorDetailQuery.error || !publicCreator ? (
+        <p className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]">
+          This profile is unavailable or unpublished.
+        </p>
+      ) : (
+        <Profile
+          creator={publicCreator}
+          saved={activeSavedIds.includes(publicCreator.id)}
+          toggleSave={() => toggleCreatorSave(publicCreator.id)}
+          demoRole={activeRole}
+          briefs={brandBriefs.filter(brief => brief.status === "published")}
+          canSave={isBrand}
+          onCollaborate={async (briefId, message) => {
+            await collaborateMutation.mutateAsync({
+              briefId,
+              creatorId: Number(publicCreator.id),
+              message,
+            });
+            toast.success("Collaboration request sent");
+          }}
+        />
+      );
+    } else {
+      content = (
+        <Profile
+          creator={activeProfile!}
+          saved={demoSavedIds.includes(activeProfile!.id)}
+          toggleSave={() => save(activeProfile!.id)}
+          demoRole={demoRole}
+          briefs={briefs}
+        />
+      );
+    }
+  } else if (path === "/brand" && isLive && !isBrand)
+    content = (
+      <p
+        role="alert"
+        className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-red-700"
+      >
+        Switch to a brand account to open the brand workspace.
+      </p>
+    );
+  else if (path === "/brand")
+    content = (
+      <BrandDashboard
+        briefs={isLive ? brandBriefs : briefs}
+        creatorCount={creatorQuery.data?.length}
+        savedCount={persistedSaved.length}
+        isLive={isLive}
+      />
+    );
+  else if (path === "/saved" && isLive && !isBrand)
+    content = (
+      <p
+        role="alert"
+        className="mx-auto max-w-[1200px] px-5 py-10 text-sm text-red-700"
+      >
+        Switch to a brand account to view saved creators.
+      </p>
+    );
+  else if (path === "/saved" && isLive && isBrand)
+    content = (
+      <SavedCreators
+        saved={persistedSaved.map(item => ({
+          savedId: item.savedId,
+          profile: item.profile,
+        }))}
+        loading={savedCreatorsQuery.isLoading}
+        error={Boolean(savedCreatorsQuery.error)}
+        onRemove={creatorId => toggleCreatorSave(String(creatorId))}
+      />
+    );
+  else if (path === "/saved")
+    content = (
+      <DemoSavedCreators
+        creators={creators}
+        savedIds={demoSavedIds}
+        onSave={save}
+      />
+    );
+  else if (path === "/briefs/new" || briefEditId) {
+    if (isLive && !isBrand) {
+      content = (
+        <p
+          role="alert"
+          className="mx-auto max-w-[1120px] px-5 py-10 text-sm text-red-700"
+        >
+          Brand account required to manage briefs.
+        </p>
+      );
+    } else if (isLive && briefEditId && myBriefsQuery.isLoading) {
+      content = (
+        <p className="mx-auto max-w-[1120px] px-5 py-10 text-sm text-[#687087]">
+          Loading brief…
+        </p>
+      );
+    } else if (isLive && briefEditId && !briefForEdit) {
+      content = (
+        <p
+          role="alert"
+          className="mx-auto max-w-[1120px] px-5 py-10 text-sm text-[#687087]"
+        >
+          Brief not found or you do not own it.
+        </p>
+      );
+    } else {
+      content = (
+        <BriefForm
+          briefs={briefs}
+          setBriefs={persistBriefs}
+          existingBrief={briefForEdit}
+          isLive={isLive}
+          onSave={values =>
+            saveLiveBrief(
+              values,
+              briefForEdit ? Number(briefForEdit.id) : undefined
+            )
+          }
+        />
+      );
+    }
+  } else if (path === "/briefs" && isLive) {
+    const query = isBrand ? myBriefsQuery : publicBriefsQuery;
+    content = (
+      <LiveBriefs
+        briefs={activeBriefs}
+        loading={query.isLoading}
+        error={Boolean(query.error)}
+        isBrand={isBrand}
+        onEdit={brief => setLocation(`/briefs/${brief.id}/edit`)}
+        onStatus={updateBriefStatus}
+      />
+    );
+  } else if (path === "/briefs") content = <Briefs briefs={briefs} />;
+  else if (path === "/requests" && isLive && (isCreator || isBrand))
+    content = (
+      <LiveRequests
+        requests={(requestsQuery.data || []) as LiveRequest[]}
+        loading={requestsQuery.isLoading}
+        error={Boolean(requestsQuery.error)}
+        isCreator={isCreator}
+        onRespond={(requestId, status) =>
+          respondMutation.mutate(
+            { requestId, status },
+            {
+              onSuccess: () => toast.success(`Request ${status}`),
+              onError: () => toast.error("Could not update request"),
+            }
+          )
+        }
+      />
+    );
+  else if (path === "/requests" && isLive)
+    content = (
+      <p
+        role="alert"
+        className="mx-auto max-w-[1000px] px-5 py-10 text-sm text-red-700"
+      >
+        Choose a creator or brand workspace to view requests.
+      </p>
+    );
   else if (path === "/requests") content = <Requests />;
   else
     content = (
@@ -1875,34 +3261,41 @@ export default function Home() {
           setDemoRole(role);
           localStorage.setItem(
             key,
-            JSON.stringify({ role, creators, briefs, savedIds })
+            JSON.stringify({ role, creators, briefs, savedIds: demoSavedIds })
           );
+        }}
+        onRoleSelect={role => {
+          if (isLive) accountTypeMutation.mutate({ accountType: role });
         }}
       />
     );
   const active = path.startsWith("/discover")
     ? "discover"
-    : path.startsWith("/briefs")
-      ? "briefs"
-      : path.startsWith("/requests")
-        ? "requests"
-        : demoRole === "brand"
-          ? "brand"
-          : "creator";
+    : path === "/creator/portfolio"
+      ? "portfolio"
+      : path.startsWith("/briefs")
+        ? "briefs"
+        : path.startsWith("/requests")
+          ? "requests"
+          : path === "/saved"
+            ? "saved"
+            : isBrand
+              ? "brand"
+              : "creator";
   return (
     <div className="shell">
       <Topbar
-        demoRole={demoRole}
+        demoRole={activeRole}
         setDemoRole={role => {
           setDemoRole(role);
           localStorage.setItem(
             key,
-            JSON.stringify({ role, creators, briefs, savedIds })
+            JSON.stringify({ role, creators, briefs, savedIds: demoSavedIds })
           );
         }}
       />
       <div className="flex">
-        <SideRail active={active} demoRole={demoRole} />
+        <SideRail active={active} demoRole={activeRole} />
         <main className="min-w-0 flex-1">
           {auth.user && (
             <div className="mx-auto max-w-[1440px] px-5 pt-4 text-xs text-[#8991a2] lg:px-10">
@@ -1912,7 +3305,16 @@ export default function Home() {
               </span>
             </div>
           )}
-          {content}
+          {auth.loading ? (
+            <p
+              role="status"
+              className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087] lg:px-10"
+            >
+              Checking account…
+            </p>
+          ) : (
+            content
+          )}
         </main>
       </div>
       <footer className="border-t border-[var(--line)] px-5 py-8 lg:px-10">
