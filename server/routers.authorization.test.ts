@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import type { RequestSupabase } from "./supabase";
@@ -505,6 +505,17 @@ describe("brief status transitions", () => {
 });
 
 describe("portfolio AI assistance", () => {
+  let originalKey: string | undefined;
+
+  beforeEach(() => {
+    originalKey = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+  });
+
+  afterEach(() => {
+    process.env.GEMINI_API_KEY = originalKey;
+  });
+
   it("reports that no provider is configured instead of inventing one", async () => {
     const caller = appRouter.createCaller(creator());
     await expect(

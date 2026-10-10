@@ -347,7 +347,7 @@ export const appRouter = router({
   portfolio: router({
     capabilities: protectedProcedure.query(({ ctx }) => {
       requireAccountType(ctx, "creator");
-      return { aiConfigured: false, uploadsConfigured: Boolean(ctx.supabase), maxUploadBytes: 8 * 1024 * 1024 };
+      return { aiConfigured: Boolean(resolvePortfolioAiProvider()), uploadsConfigured: Boolean(ctx.supabase), maxUploadBytes: 8 * 1024 * 1024 };
     }),
     projects: protectedProcedure.query(async ({ ctx }) => {
       const { client, creatorId } = await requireCreatorProfile(ctx);
@@ -390,12 +390,17 @@ export const appRouter = router({
       }),
     assist: protectedProcedure
       .input(z.object({ sourceNotes: z.string().min(10).max(12000), title: z.string().max(180).default("") }))
-      .mutation(async ({ ctx }) => {
+      .mutation(async ({ ctx, input }) => {
         await requireCreatorProfile(ctx);
         const provider = resolvePortfolioAiProvider();
         if (!provider)
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No portfolio AI provider is configured. Continue with manual editing." });
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Portfolio AI provider is not available." });
+        
+        try {
+          return await provider.generateDraft(input);
+        } catch (error: any) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message || "Failed to generate AI draft" });
+        }
       }),
   }),
 });

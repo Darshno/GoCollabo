@@ -1,9 +1,10 @@
-﻿import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RequestSupabase } from "./supabase";
 import {
   createPortfolioProject,
   getCreatorById,
   getCreatorProfileForUser,
+  isValidBriefStatusTransition,
   listBriefsForBrand,
   listPortfolioProjects,
   reorderPortfolioProjects,
@@ -242,5 +243,34 @@ describe("Supabase marketplace data access", () => {
     const saved = await saveCreator(fakeSupabase() as unknown as RequestSupabase, "20000000-0000-4000-8000-000000000001", 12);
     expect(saved).toMatchObject({ id: 70, creator_id: 12 });
     expect(state.tables.saved_creators).toHaveLength(1);
+  });
+});
+
+describe("Brief status lifecycle (DB-layer transition guard)\n  Lifecycle: draft → published → closed, no reversal", () => {
+  it("permits all forward-only transitions in the strict lifecycle", () => {
+    expect(isValidBriefStatusTransition("draft", "draft")).toBe(true);
+    expect(isValidBriefStatusTransition("draft", "published")).toBe(true);
+    expect(isValidBriefStatusTransition("published", "published")).toBe(true);
+    expect(isValidBriefStatusTransition("published", "closed")).toBe(true);
+    expect(isValidBriefStatusTransition("closed", "closed")).toBe(true);
+  });
+
+  it("rejects reversed and skipped transitions", () => {
+    // Regression: published → draft was incorrectly allowed before this fix.
+    expect(isValidBriefStatusTransition("published", "draft")).toBe(false);
+    expect(isValidBriefStatusTransition("closed", "draft")).toBe(false);
+    expect(isValidBriefStatusTransition("closed", "published")).toBe(false);
+    expect(isValidBriefStatusTransition("draft", "closed")).toBe(false);
+  });
+
+  it("returns invalid-transition for published → draft via updateBriefForBrand", async () => {
+    state.tables.briefs = [
+      { id: 10, brand_id: "brand-a", title: "Live brief", status: "published" },
+    ];
+    const client = fakeSupabase() as unknown as RequestSupabase;
+    const result = await updateBriefForBrand(client, "brand-a", 10, { status: "draft" });
+    expect(result.kind).toBe("invalid-transition");
+    // Confirm the row was not mutated.
+    expect(state.tables.briefs[0]?.status).toBe("published");
   });
 });

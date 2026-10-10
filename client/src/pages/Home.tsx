@@ -91,7 +91,7 @@ type Brief = {
   licensing?: string;
   creatorIds: string[];
 };
-type PersistedCreator = {
+export type PersistedCreator = {
   profile: {
     id: number;
     slug: string;
@@ -128,7 +128,7 @@ type PersistedCreator = {
     tools: string | null;
   }>;
 };
-type PersistedBrief = {
+export type PersistedBrief = {
   id: number;
   title: string;
   objective: string;
@@ -2746,12 +2746,21 @@ export default function Home() {
         </div>
       </div>
     ) : creatorQuery.error ? (
-      <div className="mx-auto max-w-[1440px] px-5 py-16 text-center lg:px-10">
+      <div
+        className="mx-auto max-w-[1440px] px-5 py-16 text-center lg:px-10"
+        role="alert"
+        data-testid="discover-error"
+      >
         <div className="surface mx-auto max-w-md p-8">
-          <SlidersHorizontal size={28} className="mx-auto text-[#8991a2]" />
-          <h2 className="mt-4 text-lg font-bold">Could not load creators</h2>
-          <p className="mt-2 text-sm text-[#687087]">
-            There was an issue fetching the creator directory from the server.
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#f0f2f7]">
+            <X size={22} className="text-[#8A8D98]" />
+          </div>
+          <h2 className="mt-4 text-lg font-bold" style={{ color: "#0B0D12" }}>
+            Could not load creators
+          </h2>
+          <p className="mt-2 text-sm" style={{ color: "#8A8D98" }}>
+            There was an issue fetching the creator directory. Check your
+            connection and try again.
           </p>
           <Button className="mt-5" onClick={() => creatorQuery.refetch()}>
             Retry

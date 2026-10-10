@@ -482,7 +482,7 @@ export default function PortfolioStudio() {
           .filter(Boolean)
           .join("\n\n"),
       });
-      setAssistDraft(draft);
+      setAssistDraft({ ...draft, isDraft: true });
     } catch (error) {
       setAssistError(
         error instanceof Error

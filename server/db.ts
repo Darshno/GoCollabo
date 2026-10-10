@@ -398,9 +398,10 @@ export async function createBrief(client: RequestSupabase, brandId: string, inpu
 }
 
 export function isValidBriefStatusTransition(current: BriefStatus, next: BriefStatus) {
+  // Lifecycle: draft → published → closed. No reversal once published.
   return current === next ||
     (current === "draft" && next === "published") ||
-    (current === "published" && (next === "draft" || next === "closed"));
+    (current === "published" && next === "closed");
 }
 
 const briefFieldMap: Record<keyof BriefUpdate, string> = {
