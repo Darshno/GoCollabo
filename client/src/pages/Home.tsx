@@ -96,7 +96,7 @@ type Brief = {
   licensing?: string;
   creatorIds: string[];
 };
-type PersistedCreator = {
+export type PersistedCreator = {
   profile: {
     id: number;
     slug: string;
@@ -134,7 +134,7 @@ type PersistedCreator = {
     tools: string | null;
   }>;
 };
-type PersistedBrief = {
+export type PersistedBrief = {
   id: number;
   title: string;
   objective: string;
@@ -154,7 +154,7 @@ type PersistedBrief = {
   status: "draft" | "published" | "closed";
 };
 
-function mapCreator(record: PersistedCreator): Creator {
+export function mapCreator(record: PersistedCreator): Creator {
   const { profile } = record;
   return {
     id: String(profile.id),
@@ -193,7 +193,7 @@ function mapCreator(record: PersistedCreator): Creator {
   };
 }
 
-function mapBrief(brief: PersistedBrief): Brief {
+export function mapBrief(brief: PersistedBrief): Brief {
   return {
     id: String(brief.id),
     title: brief.title,
@@ -448,7 +448,7 @@ function loadState() {
     return {};
   }
 }
-function split(value: string) {
+export function split(value: string) {
   return value
     .split(",")
     .map(v => v.trim())
@@ -590,6 +590,7 @@ function Discover({
   isDemoData?: boolean;
   allowSave?: boolean;
 }) {
+  const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
   const [type, setType] = useState("All work");
   const [mode, setMode] = useState("Any mode");
@@ -796,13 +797,36 @@ function Discover({
             />
           ))}
         </div>
+      ) : creators.length === 0 ? (
+        <div className="surface mt-4 flex min-h-[280px] flex-col items-center justify-center p-8 text-center">
+          <SlidersHorizontal size={28} className="text-[#a1a8b8]" />
+          <h3 className="mt-4 font-bold">No published creators yet</h3>
+          <p className="mt-1 text-sm text-[#687087]">
+            Be the first creator to showcase your work on GoCollabo.
+          </p>
+          <Button className="mt-4" onClick={() => setLocation("/creator")}>
+            Build your profile
+          </Button>
+        </div>
       ) : (
-        <div className="surface mt-4 flex min-h-[260px] flex-col items-center justify-center text-center">
+        <div className="surface mt-4 flex min-h-[280px] flex-col items-center justify-center p-8 text-center">
           <SlidersHorizontal size={28} className="text-[#a1a8b8]" />
           <h3 className="mt-4 font-bold">No creators match those filters.</h3>
           <p className="mt-1 text-sm text-[#687087]">
-            Try a broader style, tool, or work mode.
+            Try a broader search term, or reset your filters.
           </p>
+          <Button
+            variant="ghost"
+            className="mt-4"
+            onClick={() => {
+              setQuery("");
+              setType("All work");
+              setStyle("All styles");
+              setMode("Any mode");
+            }}
+          >
+            Clear all filters
+          </Button>
         </div>
       )}
     </div>
@@ -1177,7 +1201,7 @@ function CreatorWorkspace({
           <div className="mt-16 max-w-xl">
             <div className="h-1 w-full rounded-full bg-[#eef0f5]">
               <div
-                className="h-1 rounded-full bg-[var(--indigo)] transition-all"
+                className="h-1 rounded-full bg-[#0B0D12] transition-all"
                 style={{ width: `${((step + 1) / questions.length) * 100}%` }}
               />
             </div>
@@ -1540,26 +1564,50 @@ function Profile({
               Choose a brief and add a note. This sends a request — it does not
               start a contract or payment.
             </p>
-            <select
-              value={selectedBriefId}
-              onChange={event => setSelectedBriefId(event.target.value)}
-              className="mt-6 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm"
-            >
-              <option value="">Choose a published brief</option>
-              {briefs
-                .filter(brief => brief.status === "published")
-                .map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.title}
-                  </option>
-                ))}
-            </select>
-            <textarea
-              rows={4}
-              value={requestMessage}
-              onChange={event => setRequestMessage(event.target.value)}
-              className="mt-3 w-full rounded-xl border border-[var(--line)] p-3 text-sm outline-none"
-            />
+            {briefs.filter(brief => brief.status === "published").length === 0 ? (
+              <div className="mt-6 rounded-xl border border-dashed border-[#8A8D98]/40 bg-[#f7f8fb] p-4 text-center text-xs text-[#687087]">
+                <p className="font-semibold text-[#0B0D12]">No published briefs found</p>
+                <p className="mt-1">You must publish a brief before inviting a creator to collaborate.</p>
+                <Button
+                  className="mt-3"
+                  onClick={() => {
+                    setRequestOpen(false);
+                    setLocation("/briefs/new");
+                  }}
+                >
+                  <Plus size={14} /> Create a brief
+                </Button>
+              </div>
+            ) : (
+              <>
+                <select
+                  value={selectedBriefId}
+                  onChange={event => setSelectedBriefId(event.target.value)}
+                  className="mt-6 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm"
+                >
+                  <option value="">Choose a published brief</option>
+                  {briefs
+                    .filter(brief => brief.status === "published")
+                    .map(b => (
+                      <option key={b.id} value={b.id}>
+                        {b.title}
+                      </option>
+                    ))}
+                </select>
+                <textarea
+                  rows={4}
+                  value={requestMessage}
+                  onChange={event => setRequestMessage(event.target.value)}
+                  placeholder="Explain why this creator is right for the project (min 10 characters)…"
+                  className="mt-3 w-full rounded-xl border border-[var(--line)] p-3 text-sm outline-none"
+                />
+                {requestMessage.trim().length > 0 && requestMessage.trim().length < 10 && (
+                  <p className="mt-1 text-xs text-red-600">
+                    Message must be at least 10 characters ({requestMessage.trim().length}/10).
+                  </p>
+                )}
+              </>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setRequestOpen(false)}>
                 Cancel
@@ -2182,7 +2230,14 @@ function LiveBriefs({
         )}
       </div>
       {loading ? (
-        <p className="mt-10 text-sm text-[#687087]">Loading briefs…</p>
+        <div className="mt-10 space-y-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="surface p-5 space-y-3 animate-pulse">
+              <div className="h-5 w-48 rounded bg-[#e8ebf2]" />
+              <div className="h-4 w-96 rounded bg-[#e8ebf2]" />
+            </div>
+          ))}
+        </div>
       ) : error ? (
         <p role="alert" className="mt-10 text-sm text-red-700">
           Could not load briefs. Refresh to try again.
@@ -2198,6 +2253,11 @@ function LiveBriefs({
               ? "Create a brief to start a collaboration."
               : "Published brand opportunities will appear here."}
           </p>
+          {isBrand && (
+            <Button className="mt-4" onClick={() => setLocation("/briefs/new")}>
+              <Plus size={16} /> New brief
+            </Button>
+          )}
         </div>
       ) : (
         <div className="mt-10 space-y-3">
@@ -2227,6 +2287,11 @@ function LiveBriefs({
                     <Tag>{brief.platform}</Tag>
                     <Tag>{formatBudget(brief)}</Tag>
                     <Tag>{brief.deadline}</Tag>
+                    {brief.deliverables ? (
+                      <Tag>{brief.deliverables} deliverables</Tag>
+                    ) : null}
+                    {brief.ratio ? <Tag>{brief.ratio}</Tag> : null}
+                    {brief.duration ? <Tag>{brief.duration}</Tag> : null}
                   </div>
                 </div>
               </div>
@@ -2293,6 +2358,9 @@ function SavedCreators({
           <p className="mt-2 text-sm text-[#687087]">
             Save published creators from discovery to keep them here.
           </p>
+          <Button className="mt-4" onClick={() => setLocation("/discover")}>
+            Browse creator index
+          </Button>
         </div>
       ) : (
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -2304,6 +2372,11 @@ function SavedCreators({
                 <p className="mt-1 text-sm text-[#687087]">
                   {creator.headline}
                 </p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Tag>{creator.location}</Tag>
+                  <Tag>{creator.mode}</Tag>
+                  <Tag>{creator.availability}</Tag>
+                </div>
                 <div className="mt-4 flex gap-2">
                   <Button
                     variant="ghost"
@@ -2336,6 +2409,7 @@ function DemoSavedCreators({
   savedIds: string[];
   onSave: (id: string) => void;
 }) {
+  const [, setLocation] = useLocation();
   const saved = creators.filter(creator => savedIds.includes(creator.id));
   return (
     <div className="mx-auto max-w-[1200px] px-5 py-10 lg:px-10">
@@ -2361,6 +2435,9 @@ function DemoSavedCreators({
           <p className="mt-2 text-sm text-[#687087]">
             Saved sample creators stay in this browser only.
           </p>
+          <Button className="mt-4" onClick={() => setLocation("/discover")}>
+            Browse creator index
+          </Button>
         </div>
       )}
     </div>
@@ -2400,11 +2477,17 @@ function LiveRequests({
         <i>in motion.</i>
       </h1>
       {loading ? (
-        <p className="mt-10 text-sm text-[#687087]">Loading requests…</p>
+        <div className="surface mt-10 p-6 space-y-4 animate-pulse">
+          <div className="h-6 w-1/3 rounded bg-[#e8ebf2]" />
+          <div className="h-4 w-2/3 rounded bg-[#e8ebf2]" />
+          <div className="h-4 w-1/2 rounded bg-[#e8ebf2]" />
+        </div>
       ) : error ? (
-        <p role="alert" className="mt-10 text-sm text-red-700">
-          Could not load collaboration requests.
-        </p>
+        <div className="surface mt-10 p-8 text-center">
+          <p role="alert" className="text-sm text-red-700">
+            Could not load collaboration requests. Refresh to try again.
+          </p>
+        </div>
       ) : requests.length === 0 ? (
         <div className="surface mt-10 p-8 text-center">
           <HeartHandshake size={26} className="mx-auto text-[#8991a2]" />
@@ -2728,16 +2811,46 @@ export default function Home() {
   let content: React.ReactNode;
   if (path === "/discover" && isLive)
     content = creatorQuery.isLoading ? (
-      <p className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-[#687087]">
-        Loading creators…
-      </p>
+      <div className="mx-auto max-w-[1440px] px-5 py-10 lg:px-10">
+        <div className="space-y-3">
+          <div className="h-3 w-32 rounded bg-[#e8ebf2] animate-pulse" />
+          <div className="h-10 w-80 rounded-xl bg-[#e8ebf2] animate-pulse" />
+          <div className="h-4 w-96 rounded bg-[#e8ebf2] animate-pulse" />
+        </div>
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+            <div key={i} className="surface overflow-hidden p-4 space-y-4 animate-pulse">
+              <div className="aspect-[4/3] w-full rounded-xl bg-[#e8ebf2]" />
+              <div className="space-y-2">
+                <div className="h-4 w-3/4 rounded bg-[#e8ebf2]" />
+                <div className="h-3 w-1/2 rounded bg-[#e8ebf2]" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     ) : creatorQuery.error ? (
-      <p
+      <div
+        className="mx-auto max-w-[1440px] px-5 py-16 text-center lg:px-10"
         role="alert"
-        className="mx-auto max-w-[1440px] px-5 py-10 text-sm text-red-700"
+        data-testid="discover-error"
       >
-        Could not load creators. Refresh to try again.
-      </p>
+        <div className="surface mx-auto max-w-md p-8">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#f0f2f7]">
+            <X size={22} className="text-[#8A8D98]" />
+          </div>
+          <h2 className="mt-4 text-lg font-bold" style={{ color: "#0B0D12" }}>
+            Could not load creators
+          </h2>
+          <p className="mt-2 text-sm" style={{ color: "#8A8D98" }}>
+            There was an issue fetching the creator directory. Check your
+            connection and try again.
+          </p>
+          <Button className="mt-5" onClick={() => creatorQuery.refetch()}>
+            Retry
+          </Button>
+        </div>
+      </div>
     ) : (
       <Discover
         creators={activeCreators}
@@ -3083,7 +3196,7 @@ export default function Home() {
           {auth.user && (
             <div className="mx-auto max-w-[1440px] px-5 pt-4 text-xs text-[#8991a2] lg:px-10">
               Signed in as {auth.user.name || auth.user.email || "GoCollabo user"}.{" "}
-              <span className="font-bold text-[var(--indigo)]">Live account</span>
+              <span className="font-bold text-[#0B0D12] bg-[#C8F568] px-2 py-0.5 rounded-full text-[11px]">Live account</span>
             </div>
           )}
           {auth.loading ? (

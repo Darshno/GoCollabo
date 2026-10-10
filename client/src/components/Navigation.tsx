@@ -518,7 +518,7 @@ export function MobileTabBar({
                                     {showBadge && (
                                         <span
                                             aria-label={`${pendingRequests} awaiting your response`}
-                                            className="absolute right-1 top-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-[var(--indigo)]"
+                                            className="absolute right-1 top-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#0B0D12]"
                                         />
                                     )}
                                 </span>

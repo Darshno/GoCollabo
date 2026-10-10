@@ -10,8 +10,7 @@
   --muted: #687087;
   --line: #e8ebf2;
   --paper: #fbfbfd;
-  --indigo: #5662e8;
-  --lime: #c7f36b;
+  --lime: #c8f568;
   --radius: 0.9rem;
 }
 * {
@@ -78,12 +77,12 @@ a {
 }
 .hero-grid {
   background-image:
-    linear-gradient(rgba(86, 98, 232, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(86, 98, 232, 0.08) 1px, transparent 1px);
+    linear-gradient(rgba(11, 13, 18, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 18, 0.05) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 .focus-ring:focus {
-  outline: 3px solid rgba(86, 98, 232, 0.22);
+  outline: 2px solid #0B0D12;
   outline-offset: 2px;
 }
 .portfolio-img {
