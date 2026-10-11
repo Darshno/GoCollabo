@@ -683,61 +683,163 @@ function CreatorCard({
   allowSave?: boolean;
 }) {
   const [, setLocation] = useLocation();
+  const primaryProject = creator.projects[0];
+  const secondaryProjects = creator.projects.slice(1, 3);
+  const primaryTags = [...creator.styles.slice(0, 2), ...creator.skills.slice(0, 2)].slice(0, 3);
+
   return (
-    <article className="surface portfolio-card overflow-hidden transition hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(16,20,35,.08)]">
-      <button
-        className="relative block aspect-[4/3] w-full overflow-hidden bg-[#e8ebf2] text-left"
-        onClick={() => setLocation(`/creator/${creator.id}`)}
-      >
-        {creator.projects[0] ? (
-          <>
-            <img
-              src={creator.projects[0].image}
-              alt=""
-              className="portfolio-img h-full w-full object-cover"
-            />
-            <span className="absolute left-3 top-3">
-              <Tag tone="dark">{creator.projects[0].type}</Tag>
+    <article className="surface portfolio-card group flex flex-col justify-between overflow-hidden rounded-2xl transition hover:-translate-y-1 hover:shadow-[0_20px_45px_rgba(11,13,18,0.08)]">
+      <div>
+        {/* Main hero thumbnail */}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={`View ${creator.name}'s profile`}
+          className="focus-ring relative block aspect-[16/10] w-full cursor-pointer overflow-hidden bg-[#e8ebf2] text-left"
+          onClick={() => setLocation(`/creator/${creator.id}`)}
+          onKeyDown={e => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setLocation(`/creator/${creator.id}`);
+            }
+          }}
+        >
+          {primaryProject?.image ? (
+            <>
+              <img
+                src={primaryProject.image}
+                alt={primaryProject.title || creator.name}
+                className="portfolio-img h-full w-full object-cover"
+                loading="lazy"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0B0D12]/60 via-transparent to-transparent opacity-80" />
+              {primaryProject.type && (
+                <span className="absolute bottom-2.5 left-3">
+                  <span className="inline-flex items-center rounded-md bg-[#0B0D12]/80 px-2 py-0.5 text-[10.5px] font-bold text-white backdrop-blur">
+                    {primaryProject.type}
+                  </span>
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-[#8A8D98]">
+              Portfolio preview coming soon
             </span>
-          </>
-        ) : (
-          <span className="absolute inset-0 flex items-center justify-center text-sm text-[#687087]">
-            Portfolio coming soon
-          </span>
-        )}
-        <span className="absolute right-3 top-3 rounded-full bg-white/85 p-2 text-[var(--navy)] backdrop-blur">
-          <ArrowUpRight size={15} />
-        </span>
-      </button>
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold">{creator.name}</h3>
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--lime)]" />
-            </div>
-            <p className="mt-1 text-sm leading-5 text-[#687087]">
-              {creator.headline}
-            </p>
+          )}
+
+          {/* Availability / Verification pill on thumbnail */}
+          <div className="absolute left-3 top-3 flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0B0D12]/85 px-2.5 py-1 text-[10px] font-bold text-[#F8F7F2] backdrop-blur">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#C8F568]" />
+              {creator.availability || "Available"}
+            </span>
           </div>
+
+          {/* Quick save button */}
           {allowSave && (
             <button
-              aria-label="Save creator"
+              type="button"
+              aria-label={saved ? `Remove ${creator.name} from shortlist` : `Save ${creator.name} to shortlist`}
               onClick={e => {
                 e.stopPropagation();
                 onSave();
               }}
-              className={`rounded-full border p-2 transition ${saved ? "border-[var(--lime)] bg-[var(--lime)] text-[var(--navy)]" : "border-[var(--line)] text-[#9aa1b2] hover:text-[var(--ink)]"}`}
+              className={`focus-ring absolute right-3 top-3 rounded-full p-2 transition backdrop-blur ${
+                saved
+                  ? "border border-[#C8F568] bg-[#C8F568] text-[#0B0D12]"
+                  : "border border-white/20 bg-[#0B0D12]/60 text-white hover:bg-[#0B0D12] hover:text-[#C8F568]"
+              }`}
             >
-              <Bookmark size={14} fill={saved ? "currentColor" : "none"} />
+              <Bookmark size={13} fill={saved ? "currentColor" : "none"} />
             </button>
           )}
         </div>
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          <Tag>{creator.location}</Tag>
-          <Tag>{creator.mode}</Tag>
-          <Tag>{creator.availability}</Tag>
+
+        {/* Thumbnail preview strip if secondary projects exist */}
+        {secondaryProjects.length > 0 && (
+          <div className="grid grid-cols-2 gap-1 border-b border-[var(--line)] bg-[#F8F7F2] p-1">
+            {secondaryProjects.map((p, idx) => (
+              <div
+                key={idx}
+                role="button"
+                tabIndex={0}
+                aria-label={`Preview ${p.title || "project"}`}
+                onClick={() => setLocation(`/creator/${creator.id}`)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setLocation(`/creator/${creator.id}`);
+                  }
+                }}
+                className="relative aspect-[16/9] w-full cursor-pointer overflow-hidden rounded bg-[#e8ebf2]"
+              >
+                {p.image ? (
+                  <img src={p.image} alt={p.title} className="h-full w-full object-cover opacity-90 transition group-hover:opacity-100" loading="lazy" />
+                ) : (
+                  <span className="flex h-full items-center justify-center text-[10px] text-[#8A8D98]">Draft</span>
+                )}
+                {p.concept && (
+                  <span className="absolute bottom-1 right-1 rounded bg-[#0B0D12]/75 px-1 py-0.2 text-[8.5px] font-bold text-white">
+                    Concept
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Creator Info Header */}
+        <div className="p-4 pb-3">
+          <div className="flex items-start justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setLocation(`/creator/${creator.id}`)}
+              className="group/name text-left focus:outline-none"
+            >
+              <h3 className="font-urbanist text-[17px] font-black tracking-tight text-[#0B0D12] transition group-hover/name:text-[#1d2948]">
+                {creator.name}
+              </h3>
+            </button>
+            {creator.rates && (
+              <span className="shrink-0 text-right text-[11px] font-bold text-[#0B0D12]">
+                {creator.rates}
+              </span>
+            )}
+          </div>
+
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#687087]">
+            {creator.headline}
+          </p>
+
+          {/* Niche & Skill Tags */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {primaryTags.map(tag => (
+              <span
+                key={tag}
+                className="inline-flex items-center rounded-md bg-[#F8F7F2] border border-[var(--line)] px-2 py-0.5 text-[10.5px] font-semibold text-[#0B0D12]"
+              >
+                {tag}
+              </span>
+            ))}
+            <span className="inline-flex items-center rounded-md bg-[#f0f2f7] px-2 py-0.5 text-[10.5px] font-medium text-[#687087]">
+              {creator.location}
+            </span>
+          </div>
         </div>
+      </div>
+
+      {/* Footer / Clear Primary Action */}
+      <div className="border-t border-[var(--line)] bg-[#F8F7F2]/60 px-4 py-2.5 flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-[#8A8D98] capitalize">
+          {creator.mode} collaboration
+        </span>
+        <button
+          type="button"
+          onClick={() => setLocation(`/creator/${creator.id}`)}
+          className="focus-ring inline-flex items-center gap-1 text-xs font-bold text-[#0B0D12] transition hover:text-[#1d2948]"
+        >
+          View Profile <ArrowUpRight size={13} className="text-[#0B0D12]" />
+        </button>
       </div>
     </article>
   );
