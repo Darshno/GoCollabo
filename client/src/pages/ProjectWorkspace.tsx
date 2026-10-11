@@ -215,14 +215,7 @@ export function ProjectWorkspace({
     ],
   });
 
-  const project = isLive && projectQuery.data ? projectQuery.data : demoProject;
-
-  const isBrandParticipant = isLive
-    ? currentUserId === project.brandId
-    : userAccountType === "brand";
-  const isCreatorParticipant = isLive
-    ? currentUserId === (project as any).creatorUserId
-    : userAccountType === "creator";
+  // Live vs demo project resolution occurs after loading and error guards
 
   // Task actions
   const toggleTaskStatus = (taskId: string, currentStatus: "todo" | "in_progress" | "done") => {
@@ -446,13 +439,37 @@ export function ProjectWorkspace({
           <p role="alert" className="text-sm font-bold text-red-700">
             {projectQuery.error.message || "Could not load project workspace."}
           </p>
-          <Button className="mt-5" onClick={() => setLocation("/requests")}>
-            Back to requests
+          <Button className="mt-5" onClick={() => setLocation("/projects")}>
+            Back to projects
           </Button>
         </div>
       </div>
     );
   }
+
+  if (isLive && !projectQuery.data) {
+    return (
+      <div className="mx-auto max-w-[1200px] px-5 py-16 text-center">
+        <div className="surface mx-auto max-w-md p-8">
+          <p role="alert" className="text-sm font-bold text-[#8A8D98]">
+            Project not found or you do not have permission to access it.
+          </p>
+          <Button className="mt-5" onClick={() => setLocation("/projects")}>
+            Back to projects
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const project = isLive ? projectQuery.data! : demoProject;
+
+  const isBrandParticipant = isLive
+    ? currentUserId === project.brandId
+    : userAccountType === "brand";
+  const isCreatorParticipant = isLive
+    ? currentUserId === (project as any).creatorUserId
+    : userAccountType === "creator";
 
   const completedTasksCount = project.tasks.filter(t => t.status === "done").length;
   const progressPercent = project.tasks.length > 0 ? Math.round((completedTasksCount / project.tasks.length) * 100) : 0;
@@ -1008,7 +1025,38 @@ export function ProjectsList({ isLive, currentUserId }: { isLive: boolean; curre
     },
   ];
 
-  const projects = isLive && listQuery.data ? listQuery.data : demoList;
+  if (isLive && listQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-[1200px] px-5 py-10 lg:px-10">
+        <div className="eyebrow mb-4">Production desk / active projects</div>
+        <h1 className="serif text-5xl tracking-[-.05em] lg:text-7xl">
+          Creative <i>projects.</i>
+        </h1>
+        <p className="mt-10 text-sm text-[#8A8D98]">Loading your projects…</p>
+      </div>
+    );
+  }
+
+  if (isLive && listQuery.error) {
+    return (
+      <div className="mx-auto max-w-[1200px] px-5 py-10 lg:px-10">
+        <div className="eyebrow mb-4">Production desk / active projects</div>
+        <h1 className="serif text-5xl tracking-[-.05em] lg:text-7xl">
+          Creative <i>projects.</i>
+        </h1>
+        <div className="surface mt-10 p-8 text-center rounded-3xl">
+          <p role="alert" className="text-sm font-bold text-red-700">
+            {listQuery.error.message || "Failed to load projects."}
+          </p>
+          <Button className="mt-5" onClick={() => setLocation("/requests")}>
+            View collaboration requests
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const projects = isLive ? (listQuery.data || []) : demoList;
 
   return (
     <div className="mx-auto max-w-[1200px] px-5 py-10 lg:px-10">
@@ -1017,9 +1065,7 @@ export function ProjectsList({ isLive, currentUserId }: { isLive: boolean; curre
         Creative <i>projects.</i>
       </h1>
 
-      {isLive && listQuery.isLoading ? (
-        <p className="mt-10 text-sm text-[#8A8D98]">Loading your projects…</p>
-      ) : projects.length === 0 ? (
+      {projects.length === 0 ? (
         <div className="surface mt-10 p-8 text-center rounded-3xl">
           <Clapperboard size={26} className="mx-auto text-[#8A8D98]" />
           <h2 className="mt-4 font-bold">No active projects yet</h2>

@@ -113,6 +113,49 @@ export type CollaborationRequestRow = {
   updated_at: string;
 };
 
+export type ProjectStatus = "active" | "in_review" | "completed";
+export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskPriority = "high" | "medium" | "low";
+export type TaskSource = "brief" | "manual" | "ai_copilot";
+export type DeliverableStatus = "pending_review" | "changes_requested" | "approved";
+
+export type ProjectRow = {
+  id: number;
+  request_id: number;
+  brief_id: number;
+  brand_id: string;
+  creator_id: number;
+  status: ProjectStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectTaskRow = {
+  id: string;
+  project_id: number;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  deadline: string | null;
+  source: TaskSource;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectDeliverableRow = {
+  id: string;
+  project_id: number;
+  version: number;
+  title: string;
+  notes: string;
+  asset_url: string | null;
+  status: DeliverableStatus;
+  feedback: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -122,12 +165,33 @@ export interface Database {
       briefs: Table<BriefRow>;
       saved_creators: Table<SavedCreatorRow>;
       collaboration_requests: Table<CollaborationRequestRow>;
+      projects: Table<ProjectRow>;
+      project_tasks: Table<ProjectTaskRow>;
+      project_deliverables: Table<ProjectDeliverableRow>;
     };
     Views: Record<string, never>;
     Functions: {
       reorder_portfolio_projects: {
         Args: { project_ids: number[] };
         Returns: boolean;
+      };
+      create_project_with_tasks: {
+        Args: {
+          p_request_id: number;
+          p_brief_id: number;
+          p_brand_id: string;
+          p_creator_id: number;
+          p_tasks: Array<{
+            id: string;
+            title: string;
+            description: string;
+            status: string;
+            priority: string;
+            deadline: string | null;
+            source: string;
+          }>;
+        };
+        Returns: number;
       };
     };
     Enums: Record<string, never>;

@@ -155,15 +155,21 @@ function topItems(role: NavRole): NavItem[] {
             label: role === "brand" ? "Brand workspace" : "Creator workspace",
             icon: LayoutDashboard,
             href: role === "brand" ? "/brand" : "/creator",
-            match: p =>
-                role === "brand"
-                    ? p === "/brand" || p === "/saved" || startsWithSegment(p, "/requests")
-                    : p === "/creator" ||
-                    p === "/creator/portfolio" ||
-                    startsWithSegment(p, "/requests"),
-        },
-    ];
-}
+                    match: p =>
+                        role === "brand"
+                            ? p === "/brand" ||
+                              p === "/saved" ||
+                              startsWithSegment(p, "/requests") ||
+                              startsWithSegment(p, "/projects") ||
+                              startsWithSegment(p, "/project")
+                            : p === "/creator" ||
+                              p === "/creator/portfolio" ||
+                              startsWithSegment(p, "/requests") ||
+                              startsWithSegment(p, "/projects") ||
+                              startsWithSegment(p, "/project"),
+                },
+            ];
+        }
 
 export function showsWorkspaceChrome(path: string) {
     return path !== "/" && path !== "/404";
@@ -562,8 +568,11 @@ export function crumbsFor(path: string, role: NavRole): Crumb[] | null {
             { label: "New brief" },
         ];
     }
-    if (/^\/briefs\/[^/]+\/edit$/.test(path)) {
-        return [{ label: "My briefs", href: "/briefs" }, { label: "Edit brief" }];
+    if (path === "/projects") {
+        return [{ label: "Projects" }];
+    }
+    if (path.startsWith("/projects/") || path.startsWith("/project/")) {
+        return [{ label: "Projects", href: "/projects" }, { label: "Project Workspace" }];
     }
     return null;
 }

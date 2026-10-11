@@ -36,6 +36,12 @@ import {
 import { toast } from "sonner";
 
 const PortfolioStudio = lazy(() => import("@/pages/PortfolioStudio"));
+const ProjectWorkspace = lazy(() =>
+  import("@/pages/ProjectWorkspace").then(m => ({ default: m.ProjectWorkspace }))
+);
+const ProjectsList = lazy(() =>
+  import("@/pages/ProjectWorkspace").then(m => ({ default: m.ProjectsList }))
+);
 
 type WorkMode = "remote" | "hybrid" | "on-site";
 type Creator = {
@@ -2645,6 +2651,8 @@ function LiveRequests({
   isCreator: boolean;
   onRespond: (requestId: number, status: "accepted" | "declined") => void;
 }) {
+  const [, setLocation] = useLocation();
+
   return (
     <div className="mx-auto max-w-[1000px] px-5 py-10 lg:px-10">
       <div className="eyebrow mb-4">Collaboration desk</div>
@@ -2699,6 +2707,16 @@ function LiveRequests({
                       onClick={() => onRespond(request.id, "declined")}
                     >
                       Decline
+                    </Button>
+                  </div>
+                )}
+                {request.status === "accepted" && (
+                  <div className="mt-4 flex items-center gap-3">
+                    <Button
+                      variant="light"
+                      onClick={() => setLocation(`/projects/${request.id}`)}
+                    >
+                      Open Project Workspace <ArrowUpRight size={13} className="ml-1" />
                     </Button>
                   </div>
                 )}
@@ -3271,6 +3289,40 @@ export default function Home() {
       </p>
     );
   else if (path === "/requests") content = <Requests />;
+  else if (path === "/projects")
+    content = (
+      <Suspense
+        fallback={
+          <p className="mx-auto max-w-[1200px] px-5 py-10 text-sm text-[#8A8D98]">
+            Loading projects…
+          </p>
+        }
+      >
+        <ProjectsList isLive={isLive} currentUserId={auth.user?.id} />
+      </Suspense>
+    );
+  else if (path.startsWith("/projects/") || path.startsWith("/project/")) {
+    const rawId = path.startsWith("/projects/")
+      ? path.replace("/projects/", "")
+      : path.replace("/project/", "");
+    const parsedId = Number(rawId);
+    content = (
+      <Suspense
+        fallback={
+          <p className="mx-auto max-w-[1200px] px-5 py-10 text-sm text-[#8A8D98]">
+            Loading project workspace…
+          </p>
+        }
+      >
+        <ProjectWorkspace
+          projectId={isNaN(parsedId) ? 1 : parsedId}
+          isLive={isLive}
+          currentUserId={auth.user?.id}
+          userAccountType={isBrand ? "brand" : "creator"}
+        />
+      </Suspense>
+    );
+  }
   else
     content = (
       <Hero

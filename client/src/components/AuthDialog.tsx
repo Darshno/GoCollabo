@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { getAppUrl } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -67,7 +68,7 @@ export function AuthDialog({
     try {
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/?reset=1`,
+          redirectTo: `${getAppUrl()}/?reset=1`,
         });
         if (error) throw error;
         setMessage({
@@ -81,7 +82,7 @@ export function AuthDialog({
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
-          options: { emailRedirectTo: window.location.origin },
+          options: { emailRedirectTo: getAppUrl() },
         });
         if (error) throw error;
         if (data.session) {
@@ -217,11 +218,10 @@ export function AuthDialog({
             <p
               role="status"
               aria-live="polite"
-              className={`text-sm rounded-lg px-3 py-2 ${
-                message.type === "error"
-                  ? "bg-red-50 text-red-700"
-                  : "bg-blue-50 text-blue-700"
-              }`}
+              className={`text-sm rounded-lg px-3 py-2 ${message.type === "error"
+                ? "bg-red-50 text-red-700"
+                : "bg-blue-50 text-blue-700"
+                }`}
             >
               {message.text}
             </p>
@@ -243,10 +243,10 @@ export function AuthDialog({
             {busy
               ? "Please wait…"
               : mode === "signin"
-              ? "Sign in"
-              : mode === "signup"
-              ? "Create account"
-              : "Send reset email"}
+                ? "Sign in"
+                : mode === "signup"
+                  ? "Create account"
+                  : "Send reset email"}
           </button>
 
           {/* Mode switcher */}

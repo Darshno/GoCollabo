@@ -497,9 +497,9 @@ export const appRouter = router({
         return getProjectById(clientFor(ctx), input.id, user.id);
       }),
     list: protectedProcedure
-      .query(({ ctx }) => {
+      .query(async ({ ctx }) => {
         const user = requireAccountTypeIdentity(ctx);
-        return listProjectsForUser(user.id);
+        return listProjectsForUser(clientFor(ctx), user.id);
       }),
     updateTask: protectedProcedure
       .input(z.object({
@@ -507,9 +507,9 @@ export const appRouter = router({
         taskId: z.string().min(1),
         status: z.enum(["todo", "in_progress", "done"]),
       }))
-      .mutation(({ ctx, input }) => {
+      .mutation(async ({ ctx, input }) => {
         const user = requireAccountTypeIdentity(ctx);
-        return updateProjectTaskStatus(input.projectId, input.taskId, input.status, user.id);
+        return updateProjectTaskStatus(clientFor(ctx), input.projectId, input.taskId, input.status, user.id);
       }),
     addTasks: protectedProcedure
       .input(z.object({
@@ -522,9 +522,9 @@ export const appRouter = router({
           source: z.enum(["manual", "ai_copilot"]).optional(),
         })).min(1),
       }))
-      .mutation(({ ctx, input }) => {
+      .mutation(async ({ ctx, input }) => {
         const user = requireAccountTypeIdentity(ctx);
-        return addTasksToProject(input.projectId, input.tasks, user.id);
+        return addTasksToProject(clientFor(ctx), input.projectId, input.tasks, user.id);
       }),
     copilotFeedback: protectedProcedure
       .input(z.object({
@@ -579,9 +579,9 @@ export const appRouter = router({
         notes: z.string().max(4000).default(""),
         assetUrl: z.string().max(1000).optional(),
       }))
-      .mutation(({ ctx, input }) => {
+      .mutation(async ({ ctx, input }) => {
         const user = requireAccountType(ctx, "creator");
-        return submitDeliverable(input.projectId, input, user.id);
+        return submitDeliverable(clientFor(ctx), input.projectId, input, user.id);
       }),
     reviewDeliverable: protectedProcedure
       .input(z.object({
@@ -590,9 +590,9 @@ export const appRouter = router({
         status: z.enum(["approved", "changes_requested"]),
         feedback: z.string().max(4000).optional(),
       }))
-      .mutation(({ ctx, input }) => {
+      .mutation(async ({ ctx, input }) => {
         const user = requireAccountType(ctx, "brand");
-        return reviewDeliverable(input.projectId, input.deliverableId, input, user.id);
+        return reviewDeliverable(clientFor(ctx), input.projectId, input.deliverableId, input, user.id);
       }),
   }),
 });
