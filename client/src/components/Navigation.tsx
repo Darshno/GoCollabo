@@ -434,13 +434,24 @@ export function Topbar({
                                 live={live}
                             />
                         )}
-                        {auth.user && (
+                        {auth.user ? (
                             <button
                                 type="button"
                                 onClick={signOut}
                                 className="focus-ring flex w-full items-center justify-center gap-2 rounded-full border border-[var(--line)] px-4 py-2.5 text-sm font-semibold"
                             >
                                 <LogOut size={15} /> Log out
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOpen(false);
+                                    onLogin();
+                                }}
+                                className="focus-ring flex w-full items-center justify-center gap-2 rounded-full bg-[var(--navy)] px-4 py-2.5 text-sm font-semibold text-white"
+                            >
+                                <LogIn size={15} /> Log in
                             </button>
                         )}
                     </div>
