@@ -93,4 +93,5 @@ If you are working on GoCollabo:
 
 License
 
-A license has not been added yet. Add one before sharing or reusing the project publicly.
+A license has not been added yet.
+
