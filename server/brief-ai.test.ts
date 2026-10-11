@@ -69,8 +69,8 @@ describe("Brief AI Generation", () => {
       // Verify fields generated
       expect(draft.title).toBe("Sustainable Skincare Launch Campaign");
       expect(draft.objective).toBe(mockAiOutput.objective);
-      expect(draft.targetAudience).toBe("Eco-conscious beauty consumers aged 20-35");
-      expect(draft.audience).toBe("Eco-conscious beauty consumers aged 20-35");
+      expect(draft.targetAudience).toBe("Eco-conscious beauty consumers aged 20-35 (assumed)");
+      expect(draft.audience).toBe("Eco-conscious beauty consumers aged 20-35 (assumed)");
       expect(draft.contentType).toBe("Launch Video");
       expect(draft.creativeStyle).toBe("Organic, tactile, and radiant");
       expect(draft.style).toBe("Organic, tactile, and radiant");
@@ -125,6 +125,100 @@ describe("Brief AI Generation", () => {
       await expect(provider.generateDraft({ idea: "hi" })).rejects.toThrow(
         "A campaign idea of at least 5 characters is required"
       );
+    });
+
+    it("ensures acceptance test behavior for skincare launch video with distinct title, objective, and assumed audience", async () => {
+      const mockAiOutput = {
+        title: "Skincare Product Launch Film",
+        objective: "Build awareness, establish brand credibility, and introduce the new skincare collection.",
+        targetAudience: "Eco-conscious skincare consumers aged 22-38",
+        contentType: "Product Launch Video",
+        creativeStyle: "Radiant, tactile, and minimalist",
+        platform: "Instagram + TikTok",
+        aspectRatio: "9:16",
+        duration: "30–60 sec",
+        deliverables: 3,
+        budget: "",
+        deadline: "",
+        workMode: "remote",
+        licensing: "",
+        location: "Remote",
+      };
+
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(mockAiOutput) }] } }],
+        }),
+      } as Response);
+
+      const draft = await provider.generateDraft({
+        idea: "i need a launch video for skincare",
+      });
+
+      // Title and objective must be genuinely distinct from each other and the raw input
+      expect(draft.title).toBe("Skincare Product Launch Film");
+      expect(draft.title).not.toBe("i need a launch video for skincare");
+      expect(draft.objective).toBe(
+        "Build awareness, establish brand credibility, and introduce the new skincare collection."
+      );
+      expect(draft.objective).not.toBe(draft.title);
+      expect(draft.objective).not.toBe("i need a launch video for skincare");
+
+      // Target audience must be marked as an assumption because input did not specify audience
+      expect(draft.targetAudience).toMatch(/assumed/i);
+
+      // Other fields
+      expect(draft.contentType).toBe("Product Launch Video");
+      expect(draft.creativeStyle).toBe("Radiant, tactile, and minimalist");
+      expect(draft.deliverables).toBe(3);
+      expect(draft.budget).toBe("");
+      expect(draft.deadline).toBe("");
+      expect(draft.licensing).toBe("");
+    });
+
+    it("rejects response where AI blindly copies user input into the title", async () => {
+      const mockAiOutput = {
+        title: "i need a launch video for skincare",
+        objective: "Build awareness and introduce product.",
+        targetAudience: "General audience",
+        contentType: "Brand film",
+        creativeStyle: "Modern",
+        deliverables: 1,
+      };
+
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(mockAiOutput) }] } }],
+        }),
+      } as Response);
+
+      await expect(
+        provider.generateDraft({ idea: "i need a launch video for skincare" })
+      ).rejects.toThrow("AI returned an invalid brief title matching the raw input");
+    });
+
+    it("rejects response where AI copies user input or title into objective", async () => {
+      const mockAiOutput = {
+        title: "Skincare Launch Film",
+        objective: "i need a launch video for skincare",
+        targetAudience: "General audience",
+        contentType: "Brand film",
+        creativeStyle: "Modern",
+        deliverables: 1,
+      };
+
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(mockAiOutput) }] } }],
+        }),
+      } as Response);
+
+      await expect(
+        provider.generateDraft({ idea: "i need a launch video for skincare" })
+      ).rejects.toThrow("AI returned an invalid campaign objective matching the raw input or title");
     });
 
     it("handles rate limit errors gracefully (429)", async () => {

@@ -554,13 +554,20 @@ describe("brief AI assistance", () => {
     vi.restoreAllMocks();
   });
 
-  it("requires authentication for brief AI assistance", async () => {
-    const caller = appRouter.createCaller(anonymous());
+  it("blocks creator accounts from brief AI assistance but allows demo callers when configured", async () => {
+    const creatorCaller = appRouter.createCaller(creator());
     await expect(
-      caller.briefs.assist({
+      creatorCaller.briefs.assist({
         idea: "A campaign idea for a new product launch",
       })
-    ).rejects.toThrow(/Authentication required/);
+    ).rejects.toThrow(/Only brand accounts/);
+
+    const demoCaller = appRouter.createCaller(anonymous());
+    await expect(
+      demoCaller.briefs.assist({
+        idea: "A campaign idea for a new product launch",
+      })
+    ).rejects.toThrow(/No brief AI provider is configured/);
   });
 
   it("reports that no brief AI provider is configured instead of inventing one", async () => {
@@ -620,7 +627,7 @@ describe("brief AI assistance", () => {
     });
 
     expect(result.title).toBe("Eco Skincare Launch Video");
-    expect(result.targetAudience).toBe("Gen Z & Millennials interested in sustainability");
+    expect(result.targetAudience).toBe("Gen Z & Millennials interested in sustainability (assumed)");
     expect(result.contentType).toBe("Launch Video");
     expect(result.deliverables).toBe(2);
     expect(result.budget).toBe("");

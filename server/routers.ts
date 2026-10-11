@@ -426,13 +426,18 @@ export const appRouter = router({
       }),
   }),
   briefs: router({
-    capabilities: protectedProcedure.query(({ ctx }) => {
-      requireAccountType(ctx, "brand");
+    capabilities: publicProcedure.query(({ ctx }) => {
+      if (ctx.user && ctx.user.accountType === "creator") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only brand accounts can perform this action",
+        });
+      }
       return {
         aiConfigured: Boolean(resolveBriefAiProvider()),
       };
     }),
-    assist: protectedProcedure
+    assist: publicProcedure
       .input(
         z
           .object({
@@ -451,7 +456,12 @@ export const appRouter = router({
           )
       )
       .mutation(async ({ ctx, input }) => {
-        requireAccountType(ctx, "brand");
+        if (ctx.user && ctx.user.accountType === "creator") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only brand accounts can perform this action",
+          });
+        }
         const provider = resolveBriefAiProvider();
         if (!provider) {
           throw new TRPCError({
@@ -470,10 +480,10 @@ export const appRouter = router({
               message: error.message,
             });
           }
-          if (error.message === "AI returned malformed output") {
+          if (error.message?.includes("malformed") || error.message?.includes("invalid")) {
             throw new TRPCError({
               code: "INTERNAL_SERVER_ERROR",
-              message: "AI returned malformed output",
+              message: error.message || "AI returned malformed output",
             });
           }
           throw new TRPCError({
