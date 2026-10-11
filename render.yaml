@@ -1,0 +1,72 @@
+# Render Blueprint Configuration
+# Deploy with: render deploy
+
+services:
+  # Main GoCollabo web service
+  - type: web
+    name: gocollabo
+    env: node
+    region: oregon # or virginia, frankfurt, singapore
+    plan: starter
+    buildCommand: pnpm install && pnpm build
+    startCommand: pnpm start
+    envVars:
+      # Required for auth redirects
+      - key: VITE_APP_URL
+        sync: false
+        generateValue: true
+        description: "Full URL of your deployed app (e.g., https://gocollabo.onrender.com)"
+      
+      # Supabase Configuration (Required)
+      - key: VITE_SUPABASE_URL
+        sync: false
+        description: "Your Supabase project URL"
+      
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+        description: "Your Supabase anon/publishable key"
+      
+      - key: SUPABASE_URL
+        sync: false
+        description: "Your Supabase project URL (server-side)"
+      
+      - key: SUPABASE_ANON_KEY
+        sync: false
+        description: "Your Supabase anon/publishable key (server-side)"
+      
+      # Production Environment
+      - key: NODE_ENV
+        value: production
+      
+      # Optional - AI Features
+      - key: GEMINI_API_KEY
+        sync: false
+        optional: true
+        description: "Gemini API key for AI features (server-only)"
+      
+      # Optional - Google Maps
+      - key: VITE_GOOGLE_MAPS_API_KEY
+        sync: false
+        optional: true
+        description: "Google Maps API key for location features"
+    
+    # Health check for Render
+    healthCheckPath: /api/health
+    
+    # Auto-scale configuration
+    autoDeploy: true
+    
+    # Resource allocation
+    resources:
+      memory: 512MB
+      cpu: 0.25
+
+databases:
+  # Note: GoCollabo uses Supabase, so no PostgreSQL database needed here
+  # Keep this section commented unless you need a separate database
+  # - name: gocollabodb
+  #   plan: starter
+  #   region: oregon
+  #   ipAllowList:
+  #     - source: 0.0.0.0/0
+  #       description: everywhere
